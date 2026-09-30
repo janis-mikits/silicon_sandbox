@@ -1,0 +1,68 @@
+# Appendix A Graphics and future tools
+
+## In this file
+
+- [Confirmed visual priorities](#confirmed-visual-priorities)
+- [Rendering and update invariants](#rendering-and-update-invariants)
+- [Renderer boundary contract](#renderer-boundary-contract)
+- [Future EDA and timing tools](#future-eda-and-timing-tools)
+- [Future automatic routing multiplayer and VR](#future-automatic-routing-multiplayer-and-vr)
+
+## Confirmed visual priorities
+
+Use a block art grid of 16 by 16 by 16 pixels initially, with configurable texture density. Future textures may add detail, face extrusions, and indents. In descending priority: make each object’s function intuitive at a glance; keep designs simple and uncluttered so circuits remain readable and rendering can be efficient; then improve beauty without sacrificing those priorities. The original expectation that lower pixel density automatically makes rendering faster is a performance hypothesis to measure, not a guarantee.
+
+Normal world visuals show settled circuit values, with an appearance reminiscent of Sebastian Lague’s Digital Logic Sim. Only visible geometry needs rendering. Simulation continues outside the view and render range. Breaking an object must reveal the correct neighboring faces without rendering gaps.
+
+## Rendering and update invariants
+
+**Decision, 29 September 2026:** For generated opaque block geometry, omit a face that is fully hidden by an opaque neighbor when that occlusion is certain. Do not apply this rule to partially exposed faces or use it to erase visible wire, harness, Net Link, pin, junction, crossing, outline, or other required detail. Placement, removal, undo, and other geometry-changing edits must expose or hide affected faces correctly, including where two [render regions](project-vision-and-world.md#world-data-and-rendering-architecture) meet. The rendered shape must still communicate the exact electrical topology and allow the [specified fine targeting](physical-connections.md#pins-and-targeting) and [crowded selection](physical-connections.md#crowded-selection-and-invalid-actions). Render-mesh merging must not redefine hitboxes, logical channels, or connections.
+
+**Decision, 29 September 2026:** A local geometry edit invalidates only the affected region graphics and any neighboring region boundaries whose visible faces or details change. It must not rebuild graphics across the entire world. An implementation may rebuild a small affected region or update a smaller mesh part; choose by measured edit latency and correct output. Graphics that are outside view may be omitted or unloaded, but authored content and simulation state remain present, and the graphics must be current when viewed again. See the [world data/rendering foundation](project-vision-and-world.md#world-data-and-rendering-architecture) and [simulation boundary](digital-simulation.md#runtime-architecture-decision).
+
+**Decision, 29 September 2026:** Frequently changing signal colors must not force reconstruction of unrelated static world geometry. Keep visual updates limited to the signal presentation that changed and any genuinely affected nearby graphics. The implementation may use material data, instance data, separate dynamic geometry, or another method that preserves the [four-state visual meanings](digital-simulation.md#visuals). Measure the update cost; no particular GPU technique is required by this decision.
+
+These invariants apply to the professor milestone and the intended full game. Texture atlases, mipmaps, instancing, greedy meshing, multithreaded mesh generation, dynamic occlusion, distant LOD, and compression remain implementation candidates, not required techniques. Choose them using the [performance and correctness checks](performance-and-platforms.md#rendering-optimization-checks). The [Minecraft optimization research](../minecraft-optimization-research.md) records the evidence and rejected or deferred analogies.
+
+## Renderer boundary contract
+
+**Decision, 29 September 2026:** The first playable and later game shall use the following boundary between authored world data, simulation, and graphics. Its purpose is to let the renderer change or gain advanced techniques without changing saved circuit definitions, electrical behavior, or player interaction. This is a **behavioral contract**, not a requirement for particular C# interfaces, events, mesh formats, Unity GameObjects, jobs, or render pipelines. The [world-data foundation](project-vision-and-world.md#world-data-and-rendering-architecture), [simulation boundary](digital-simulation.md#runtime-architecture-decision), and [rendering invariants](#rendering-and-update-invariants) remain in force.
+
+### Ownership and inputs
+
+| Responsibility | Contract |
+| --- | --- |
+| Authored design | The sparse world design and exact referenced module-version blueprints own placed identities, positions, orientation, shapes, connector topology, pin/bit mapping, and design appearance. The renderer may read the data needed to draw or target them; a mesh or visual cache is not the authoritative design. Packaging, editing, undo/redo, and [saving](saving-and-recovery.md) operate on the authored design, not a rendered approximation. |
+| Simulation | The independent simulator owns current electrical values and events, including state inside every module instance. It supplies the latest settled values needed for presentation. Rendering visibility, region loading, frame rate, and level of detail never schedule, skip, reorder, or stop circuit events. The renderer does not write electrical state. |
+| Renderer | The renderer derives visible geometry, materials, outlines, and other presentation from authored data and settled simulation state. Region meshes, batches, culling results, and any distant representations can be discarded and rebuilt without losing authored content or live electrical state. The exact representation may change later. |
+
+The boundary shall make the following information available to rendering and targeting, whether by read-only views, queries, snapshots, notifications, or another implementation: the relevant authored geometry and appearance for a spatial area; the logical identity and selectable part of each visible object; the current settled presentation state; and the scope of changes that make derived graphics stale. It need not expose the simulator's internal event queue or make each object a separate GameObject. The exact API and data layout remain implementation choices.
+
+### Edits and invalidation
+
+- A committed geometry or topology edit, including place, break, reconnect, rotation, group operations, module placement or upgrade, undo, and redo, shall make affected graphics and selection data reflect the resulting authored design. Loading a world shall construct the same correct view from its saved design. Only affected render regions and relevant neighbor boundaries need graphics invalidation after a local edit; a local edit shall not require a world-wide visual rebuild. A topology change may require separate simulator-graph work under the [safe edit rules](circuit-time-and-clock.md#safe-pause-and-editing); render-region boundaries do not define electrical connectivity.
+- A simulation value change shall update the relevant signal presentation without rebuilding unrelated static geometry. The displayed value is the latest settled value, including 0, 1, X, and Z and the specified X pulse. Electrical transitions too fast to animate remain processed by the simulator; drawing need not show every intermediate transition. Offscreen graphics may defer visual work, but must refresh from current authored data and settled state before they are shown again.
+- If rendering preparation occurs asynchronously, its result shall be applied only if it still corresponds to the current authored data for every region and boundary it covers. An edit or undo that supersedes a pending result must prevent that result from restoring stale faces, colors, collision/selection proxies, or object presence. A revision/generation token is one possible method; no particular mechanism or threading model is required. Applying graphics and target data must not expose a partially updated interaction state.
+
+### Exact interaction across render methods
+
+- A target or hit shall resolve to the exact authored object and selectable part required by the [connection rules](physical-connections.md): individual connector segment and channel, pin and face quadrant, block or module, or floor grid cell as appropriate. That mapping shall remain valid when geometry is combined, instanced, culled, regenerated, or drawn at a different level of detail. A visual draw-batch identifier by itself is not an electrical identity.
+- The identity used for targeting shall remain stable across visual rebuilds and culling for as long as the authored object exists. Deletion and undo/redo shall not cause a stale graphics result to select a different object. This does **not** choose an ID encoding, memory layout, or additional save-file field; saved identity requirements remain in [saving](saving-and-recovery.md) and [modules](modules-and-packaging.md).
+- Any simplified distant representation is presentation only. It shall not make a crossing appear electrically joined, hide a required nearby diagnostic or connection detail, or perform an ambiguous fine edit. At the distance and state where the player can target or edit a connector or pin, the exact required geometry and target mapping shall be available. The specific distance and transition method remain open.
+- The generated floor may use one or several meshes, but floor-cell selection, outline, collision, placement reference, and unbreakability remain exact under either representation. The floor is derived from its [configurable generation rules](project-vision-and-world.md#default-sandbox-and-boundaries), not stored as a million authored blocks merely to make targeting work.
+
+### Replaceability and verification
+
+The first renderer shall provide an exact interaction view for the features included in each delivery stage on both supported platforms. A later LOD, occlusion, batching, background-build, or hardware-specific path may replace parts of its drawing work, but it must preserve the same authored-data and selection contracts and have a supported path on Windows and macOS. This does not require building multiple renderers during the professor milestone; it requires that the initial renderer not become the only owner of world geometry, topology, or picking identities.
+
+Before accepting a renderer change, use the [performance comparison](performance-and-platforms.md#rendering-optimization-checks) and verify these equivalences against the current path: placing, breaking, rotating, loading, undoing, and redoing expose the correct faces and selection targets; edits at region boundaries do not leave gaps; crossing and junction geometry remain distinguishable; individual thin wires, channels, pins, and floor cells remain selectable; returning to an offscreen circuit shows its latest settled values; and the simulator processes the same events and yields the same electrical results with graphics visible, hidden, or simplified. Compare frame time, edit latency, memory, and achieved simulation throughput separately. The existing first-playable numbers remain the only selected numerical targets; no advanced technique is required solely by this contract.
+
+## Future EDA and timing tools
+
+After the core game is finished and polished, add an EDA-style interface using Synopsys Verdi as the confirmed reference: waveforms, condensed input/output views, signal-cause debugging, and complex test cases for designs too large or fast to inspect by eye. Complete waveform-history recording is an optional future feature and must use a configurable simulated-time or memory limit. A separate implementation-timing mode may add technology-specific cell and routed-wire delays, rise/fall and clock-to-Q timing, setup/hold checks, glitches, pulse handling, timing violations, critical paths, slack, and SDF-like annotation. These are future directions; the detailed timing-profile, violation-panel, pause-on-violation, inertial-filter, per-instance override, and net-link-delay proposals were not adopted as core requirements.
+
+## Future automatic routing multiplayer and VR
+
+Automatic wire routing is optional and deferred until the core is complete. The original concept selects faces on any number of objects with Q, then confirms with right-click to compute and place an optimal wire route, analogous to place-and-route tools. Bindings are remappable. Open: pin-level endpoint selection, channel conflicts, route objectives, and preview/confirmation behavior. Automatic routing must be an explicit action; it does not restore proximity-based connections.
+
+The original document called routing its least-priority feature. The later user decision makes education the lowest-priority major mode. Both are deferred; no complete ordering of all optional features was fixed. Multiplayer and VR compatibility, if feasible, remain future possibilities. Other later options include drive strengths, an advanced electrical mode, true simulation checkpoints, stronger NVM durability, explicit memory migration, asynchronous buttons, programmable dividers, sticky-overflow or asynchronous-reset counters, and clearly labeled teaching animations.

@@ -1,0 +1,58 @@
+# 3 Physical connections and rotation
+
+## In this file
+
+- [Terms and capacity](#terms-and-capacity)
+- [Pins and targeting](#pins-and-targeting)
+- [Junctions and crossings](#junctions-and-crossings)
+- [Authored topology representation](#authored-topology-representation)
+- [Visible topology](#visible-topology)
+- [Crowded selection and invalid actions](#crowded-selection-and-invalid-actions)
+- [Post placement rotation](#post-placement-rotation)
+- [Connector appearance](#connector-appearance)
+
+## Terms and capacity
+
+“Connector” means a physical wire, a harness, or a Net Link. An electrical net is a continuous signal made of one or more connected segments; an N-bit harness represents N separately resolved bit nets. A Net Link is a visible, targetable, breakable physical stub whose matching link names connect electrically without a continuous route of ordinary segments. Unlike an early proposal, Net Links consume a physical connection channel. Each block space has at most four independent logical channels. Connector geometry may bend or shift for legibility as more segments are placed, but that must never change existing net membership. A connector path may enter or leave any of the six faces: north, south, east, west, up, or down. Every connector type—wire, harness, and Net Link—may both form a junction and participate in concatenation through any of those six faces, subject to the four-channel capacity and the normal width and collision rules.
+
+## Pins and targeting
+
+A block face can show up to four circular pins at the centers of a 2 by 2 quadrant grid. The crosshair can target a particular pin or individual channel. Right-click places a selected connector by default; left-click breaks the targeted segment by default. A connector placed while targeting a free pin attaches to it. Only a connector can attach to a component or module pin; adjacent components never connect merely by touching. An occupied pin accepts no second connector. To replace its connector, the player targets and breaks the old segment, then targets the pin and places a new one. Reaching or visually touching another object is insufficient to form an electrical connection.
+
+## Junctions and crossings
+
+A connector placed while targeting another connector makes an electrical junction. Two paths crossing inside the same cell without targeting one another remain separate. A segment that enters and exits a cell remains electrically continuous. An ordinary wire junction unites one-bit nets; an equal-width harness junction unites corresponding bits, not all bits with one another. Breaking a segment can divide one net into several; each part is then recalculated. Adding a south branch to an existing north-to-east elbow while targeting the elbow makes a T junction; the existing elbow must not be silently turned into a separate north-south path. A physical wire and harness may occupy different channels in the same cell.
+
+## Authored topology representation
+
+**Decision, 30 September 2026:** The saved authored design records each connector's identity, physical path through grid cells and faces, and occupied logical channel separately from its electrical joins. It explicitly records which connector ends, component pins, junctions, and module ports are electrically attached. Continuity along one connector path and the explicit attachment records determine ordinary one-bit nets; the simulator derives its working nets from this authored topology. Visual proximity, shared cell occupancy, a geometric crossing, a matching ordinary tag, or a renderer mesh must never create an electrical join by inference. A crossing remains separate unless an explicit junction joins the paths. The renderer derives the specified visible shape and exact selectable part from the same authored records; it does not own or redefine the connectivity.
+
+The representation must retain the four-channel-per-cell occupancy independently from net membership. It must be extensible to the [confirmed per-bit harness junction and split/combination mappings](harnesses-and-net-links.md), [scoped Net Link connectivity](harnesses-and-net-links.md#net-link-identity-and-scope), and exact [module port mappings](modules-and-packaging.md#packaging-region-and-ports). These later mappings do not short unrelated bits or instances together. The [first-playable JSON route/join records](first-playable-data-schema.md#connector-geometry-and-joins) define the one-bit format. The measured graph-update algorithm and identity policy for other later structural replacements remain open until their affected features; the ordinary tag-merge rule is specified below. Structural edits follow the [safe-pause and all-or-nothing edit rule](circuit-time-and-clock.md#safe-pause-and-editing) and [derived graph refresh rule](digital-simulation.md#derived-graph-refresh-after-structural-edits), with existing invalid-action feedback.
+
+**Connector split identity decision, 30 September 2026:** When breaking a connector leaves two surviving connector pieces, retire the original connector identity and assign each surviving piece a new UUIDv4 identity. Record the old-to-new relationship for selection and undo within the edit transaction, and update or reject affected references under the all-or-nothing rule; no surviving piece silently inherits the original ID. A retired ID is not assigned to a different entity. Undo may restore the prior authored revision with its original identity. This rule concerns the identity of physical connector pieces; it does not define the separate later harness bit-split mapping behavior.
+
+## Visible topology
+
+Electrical connection must be inferable from geometry. An endpoint needs no junction marker. A joined path with two incident directions appears as a straight segment or elbow, without a separate marker. A joined net with three to six incident directions gets a visible junction marker. Count directions separately for each net in the cell; crossing nets do not inflate one another’s count. A crossing without a junction stays visibly separate. Removing a branch updates the shape. A concatenation point has a visibly different marker and always appears, even when only two directions are involved. Procedural geometry is acceptable if these distinctions are clear; individual mesh models for every combination are not mandatory. The user specifically accepted this wording:
+
+> Every junction configuration shall visibly show which connector paths are electrically joined. A crossing without a junction shall remain visibly separate.
+
+## Crowded selection and invalid actions
+
+Crosshair aim first selects the nearest visible segment; moving to a face quadrant selects that channel. The selected segment gets a bright outline and its connected net a softer highlight. Connector pieces joined into one net share a tag; ordinary tags by themselves never create Net Link connectivity. A small hover readout gives tag, width, current value, and connection count. Scroll or a configurable cycling key selects overlapping segments. When no channel remains or a pin is occupied, briefly flash the pin or four occupied channels red once and play a quiet invalid-action click or buzz. No popup text appears, even after repeated attempts. The red flash is short and singular so it cannot be confused with logic X.
+
+**Ordinary tag edit rule, 30 September 2026:** Joining two ordinary nets whose nonempty tags differ presents both names before commit and requires the player to choose one retained name or enter a replacement. A rejected or canceled choice leaves the edit unchanged. Equal tags or a single nonempty tag carry through automatically. If a break divides a tagged net, both resulting nets retain that text until the player edits either one; equal tags alone never reconnect them. This is an authored label rule, not Net Link naming or electrical connectivity.
+
+## Post placement rotation
+
+The final decision allows rotation of a placed component or module. Rotation first auto-pauses, previews the new orientation and any connections that would be lost, and requires confirmation. Any connections that would be lost are highlighted. Existing connector segments stay where they are; only new pin positions that still align with compatible connector ends remain attached. Nothing stretches or reroutes. Any disconnected end follows normal four-state resolution. For a multiblock object, the rotated footprint must fit available empty space or the operation is invalid. This final rule supersedes the temporary suggestion to forbid rotation after placement.
+
+**Grid-aligned rotation decisions, 30 September 2026:** Placed components and modules rotate in 90-degree steps aligned with the world grid. Their valid orientations preserve exact cell-aligned footprints, block faces, pin quadrants, and connector attachment checks. The authored/save representation supports all 24 proper grid-aligned 3D orientations of a placed component or module, so later pitch and roll controls can be added without changing the saved meaning. The first playable needs controls only for turns around the world's vertical axis; pitch and roll controls may follow later. This does not change the safe-pause, lost-connection preview, or complete-footprint checks above. The [coordinate-axis convention](project-vision-and-world.md#world-data-and-rendering-architecture) and [first-playable rotation controls](building-and-interface.md#default-controls) are specified. This decision does not add a general rotation rule for ordinary construction blocks.
+
+**Saved orientation encoding decision, 30 September 2026:** Store a placed component's or module's orientation as `{"forward":"north","up":"up"}`-style JSON: `forward` is the direction its local front faces and `up` is the direction its local top faces. Each value is one of the lowercase world-face labels `north`, `south`, `east`, `west`, `up`, or `down`. The two directions must be perpendicular; parallel or opposite pairs are invalid. Each valid pair identifies one of the 24 proper grid-aligned orientations. The renderer and simulator may convert this record to a compact runtime orientation; simulation does not repeatedly parse these strings. The [authored grid convention](project-vision-and-world.md#world-data-and-rendering-architecture) fixes the coordinate origin and axes, and the [version 1 schema](first-playable-data-schema.md#grid-and-orientation) fixes the footprint and pin transform.
+
+## Connector appearance
+
+Wire diameter is 0.25 of a block width, with a hitbox matching the thin geometry so players can walk close to it. Straight pieces, 90-degree elbows, and branches can use all six faces. Harnesses have the same diameter and narrow hitbox regardless of width, with a distinctive texture. A Net Link is a straight wire-like stub with a semispherical cap. It remains a physical, visible, targetable, breakable segment even though matching links communicate without a continuous physical chain.
+
+**Identity and signal color rule, 30 September 2026:** A connector's main visible body carries the current 0/1/X/Z signal-state color from [digital simulation](digital-simulation.md#visuals). Its saved player-selected identity color appears on a separate narrow stripe, ring, or end cap that does not obscure the body, X pulse, junction/crossing shape, or target outline. An unset identity color uses a neutral default. This settles first-playable one-bit presentation without assigning a mixed-value color to later harnesses.

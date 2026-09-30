@@ -1,0 +1,118 @@
+# First-playable authored data and save schema
+
+## In this file
+
+- [Scope and authority](#scope-and-authority)
+- [Grid and orientation](#grid-and-orientation)
+- [World archive](#world-archive)
+- [Shared authored design](#shared-authored-design)
+- [Connector geometry and joins](#connector-geometry-and-joins)
+- [Module versions and instances](#module-versions-and-instances)
+- [Global library and recovery](#global-library-and-recovery)
+- [Validation and compatibility](#validation-and-compatibility)
+
+## Scope and authority
+
+**Decision, 30 September 2026:** This is the version 1 logical JSON contract for the first-playable professor milestone. It implements the accepted [ZIP world container](saving-and-recovery.md#first-playable-world-save-container), [authored topology](physical-connections.md#authored-topology-representation), [persistent identity](modules-and-packaging.md#persistent-identity-model), and [fixed module-version model](modules-and-packaging.md#canonical-design-and-runtime-representation). It defines records and references, not C# classes or Unity scene objects. Future format versions may add fields or partition large designs while retaining their circuit meaning. The supported first-playable component and feature subset is in [delivery](delivery-and-acceptance.md#first-playable-professor-milestone); this schema does not remove later-game requirements.
+
+The authored world and embedded fixed module versions are authoritative. The simulator's graph, net IDs/indexes, rendered geometry, selection proxies, ordinary signal values, flip-flop state, pending events, simulation time, and world-clock phase are **not** authoritative save entries. Their load behavior follows [saving](saving-and-recovery.md#saved-design-versus-transient-simulation). Persisted undo history, NVM, and Education progress are later format additions under their existing requirements.
+
+## Grid and orientation
+
+Use the accepted [grid convention](project-vision-and-world.md#world-data-and-rendering-architecture): integer `[x,y,z]` cells, x east, y up, z north, southwest generated-floor cell `(0,0,0)`, floor layer `y=0`, first placeable layer `y=1`. World dimensions and height remain configurable. A module design stores local integer cells, normalized so its captured bounding region has minimum cell `(0,0,0)`; its `sizeCells` gives the rectangular bounding dimensions. A placed instance's `anchorCell` is the world cell corresponding to module-local cell `(0,0,0)`.
+
+Components and module instances save `orientation` as `{"forward":"north","up":"up"}` with the six lowercase face labels and perpendicular directions, as [accepted](physical-connections.md#post-placement-rotation). In world axes, local +z is `forward`, local +y is `up`, and local +x is `up × forward`. Thus a module-local cell vector `c` maps to `anchorCell + R(c)`, where `R` uses those three basis directions. A component's own local cell `(0,0,0)` stays at its anchor during rotation. Its transformed occupied cells and pins must pass the existing complete-footprint and connector checks. This transform supports all 24 proper grid orientations even though first-playable controls need only vertical-axis turns. It does not specify a construction-block rotation feature.
+
+For exact 2 × 2 face positions without a camera-dependent quadrant-number convention, a pin, port, or connector face point uses `pointQ:[qx,qy,qz]` in quarter-cell units relative to its owning cell. A face point has exactly one coordinate `0` or `4` and the other two each `1` or `3`; a center point is `[2,2,2]`. The face follows from the coordinate at `0` or `4`: x=0 west, x=4 east, y=0 down, y=4 up, z=0 south, z=4 north. The four combinations on a face are its four quadrants. To rotate a point within a local cell, rotate its center-relative vector `pointQ - [2,2,2]` with `R` and add `[2,2,2]` in the transformed cell. The resulting point and face remain exact integers. Display labels for quadrants may be chosen by the UI; save references use `pointQ`.
+
+## World archive
+
+The first format version is JSON integer `1`. A world archive contains exactly one `manifest.json`, one `world.json`, and one `modules/<moduleVersionId>.json` for every version in the dependency closure of world placements and module items explicitly stored in that world's inventory. A definition nested in a module adds its exact child version to the closure. The separate global library may contain additional versions; merely being globally available does not copy every version into every world save. ZIP paths are fixed ASCII forms; `<moduleVersionId>` uses canonical lowercase UUID text. No two entries may have the same normalized path or module-version UUID. The module definition is included once per exact version, even when many instances use it.
+
+| Entry | Required version 1 fields | Meaning |
+| --- | --- | --- |
+| `manifest.json` | `formatVersion`, `worldId`, `entries`, `moduleVersions` | `entries[]` has `path`, `uncompressedBytes`, and lowercase hex `sha256` for `world.json` and every module entry; the digest covers the exact uncompressed UTF-8 entry bytes. The manifest does not hash itself. `moduleVersions[]` has `familyId`, `versionId`, `path`, and `childVersionIds[]`. |
+| `world.json` | `worldId`, `worldName`, `mode`, `worldSettings`, `player`, `inventory`, `design` | `worldId` equals the manifest value. `mode` is `freeplay` in version 1; later Education data uses a later format version. |
+| `modules/<versionId>.json` | `familyId`, `versionId`, `name`, `sizeCells`, `ports`, `childVersionIds`, `design` | An immutable authored version. Its IDs and dependencies agree with the manifest and filename. `sizeCells` contains three positive integers. |
+
+`worldSettings` contains `widthCells`, `lengthCells`, `heightCells`, `floorMaterialId`, `floorThicknessCells`, `wallStyleId`, and `worldClockFrequencyHz`. For version 1, `floorThicknessCells` is `1` and the floor is generated rather than repeated as authored blocks. `worldClockFrequencyHz` is a positive decimal string, so its exact requested decimal value survives JSON parsing; version 1 accepts 0.1 through 100 inclusive and defaults to `"10"`. Running/stopped state and current clock level are not fields. Other world-generation values may be added in a later format version without hardcoding the provisional world size.
+
+`player` contains finite numeric `position:[x,y,z]` in world-cell units and finite normalized `lookDirection:[x,y,z]`; it is presentation/player state, not a circuit coordinate or simulated signal. `inventory` contains `slots`, an array of 36 entries, each `null` or a typed item reference, and `selectedHotbarSlot` in 0–8. A catalog item reference has `kind:"catalogItem"` and a durable `itemTypeId`; a module item reference has `kind:"moduleVersion"`, `familyId`, and exact `versionId`. Modules available in the separate global library need not occupy a slot or be embedded in a world that does not otherwise reference them. Freeplay's wider catalog availability is a mode rule, not 36 duplicated item records.
+
+## Shared authored design
+
+Both `world.json.design` and a module version's `design` contain `objects[]`, `connectors[]`, and `joins[]`. Every authored object, connector, route node/span, pin, join, module port, version, and instance identity is a UUIDv4 value written in the accepted lowercase hyphenated form. IDs are unique within their documented owning design or global version/instance scope; references use parsed UUID values, not raw text casing. A module blueprint has its own local authored IDs, independent of the source circuit's IDs. Packaging creates fresh IDs for that snapshot and rewrites its internal references while leaving the world source circuit and IDs in place. [Region-boundary extraction](modules-and-packaging.md#packaging-region-and-ports) determines which inside connector pieces and port candidates enter that snapshot; omitted outside paths never become implicit internal joins.
+
+| `objects[]` variant | Required fields | Saved meaning |
+| --- | --- | --- |
+| `kind:"block"` | `id`, `blockTypeId`, `cell`, `appearance`, `tag` | Ordinary placed construction block. Generated floor and border are represented by generation settings, not a block per cell. |
+| `kind:"component"` | `id`, `typeId`, `typeVersion`, `anchorCell`, `orientation`, `configuration`, `pins[]`, `tag` | Component identity, exact geometry/pin snapshot, and authored configuration. A `pins[]` item has `id`, stable `pinKey`, `direction`, `width`, local `cellOffset`, and local `pointQ` face position. |
+| `kind:"moduleInstance"` | `id`, `instanceId`, `familyId`, `versionId`, `instanceName`, `anchorCell`, `orientation`, `interfaceSnapshot`, `tag` | Fixed version reference and separate placed-instance identity. `interfaceSnapshot` preserves the footprint and exterior ports for missing-version recovery; transient internal state is not copied or saved here. |
+
+The version 1 built-in `typeId` values are `builtin.constant_logic_source`, `builtin.and`, and `builtin.sr_flip_flop`, each with `typeVersion:1`. Their stable pin keys are `OUT`; `A`, `B`, `Y`; and `S`, `R`, `CLK`, `Q`, `Q_bar`, respectively. The `pins[]` snapshot records each actual location/direction/width and is validated against the supported type version; a later type revision cannot silently move a saved pin. The first-playable widths are 1. A source's `configuration` has `width:1`, `onValueBits` as one of `"0"`, `"1"`, `"X"`, or `"Z"` in a one-element array, and `initialOn` as a boolean. The AND has `width:1`. The SR flip-flop has `initialQ`, either `null` for no explicit initialization or one four-state bit. A runtime click changes neither `initialOn` nor `onValueBits`; observed Q/current source state is not serialized. Later component types require their own versioned configuration and pin contract.
+
+`appearance` and `tag` are saved authored presentation data. `appearance` stores the selected identity color/material/style as durable identifiers or color values appropriate to the object type; signal-state colors remain derived from live simulation, not saved as current values. Empty tags are allowed, but Net Link names are separate electrical identifiers under the [scope rule](harnesses-and-net-links.md#net-link-identity-and-scope). The implementation must assign stable type/style identifiers before shipping format version 1; changing only an asset file name must not silently change an old circuit.
+
+## Connector geometry and joins
+
+Each `connectors[]` record has `id`, `kind`, `width`, `nodes[]`, `spans[]`, `tag`, and `identityColor`. `kind` is `wire` or the special `netLink` needed for the world clock in version 1; harnesses and ordinary named Net Links use later format extensions without changing wire meaning. A `netLink` additionally has `linkName`, `linkScope`, and `sourceKind`. The special clock stub uses `linkScope:"world"` and `sourceKind:"worldClock"`; its name is reserved so an ordinary player-named link cannot impersonate the built-in source. Other ordinary Net Link naming and per-instance scope follow their canonical rules when that feature is added.
+
+A connector's `nodes[]` item has `id`, `cell`, `channel` (integer 0–3), and `pointQ`. A `spans[]` item has `id`, `fromNodeId`, and `toNodeId`. Nodes and spans are stable targetable connection parts. A span is either within one cell or crosses one shared face between adjacent cells. A cross-cell span must have face points on opposing faces at the same physical boundary position. A connector's node/span graph must be connected and nonempty; its path may form a straight route, elbow, or branch. The authored spans, not geometric proximity or visual mesh, define continuity inside a connector. A branch marker derives from graph incidence; a crossing between different connectors remains separate without an explicit join. Logical channel occupancy is tracked per cell independently of electrical net membership. Distinct electrical paths cannot occupy the same logical channel in one cell unless they are explicitly joined into one path under the capacity rules. Rendering may offset the geometry for legibility without changing saved channel or topology.
+
+`joins[]` records explicit electrical attachments. A join has `id` and `members[]` with at least two references. Each member is one of:
+
+| `targetKind` | Required reference fields | Resolution |
+| --- | --- | --- |
+| `connectorNode` | `connectorId`, `nodeId` | Node of a connector in the same owning authored design. |
+| `componentPin` | `objectId`, `pinId` | Saved pin of a component in the same design. |
+| `modulePortBit` | `objectId`, `portId`, `bitIndex` | Exact port bit of the module version pinned by that placed object; bit index 0 for first-playable width-1 ports. |
+
+For example, one wire occupying the west-to-east route through cell `[1,1,0]` and explicitly attached at its west end to a source pin can be recorded as follows (the source object and pin records are omitted here, but their IDs must exist in the same design):
+
+```json
+{
+  "connectors": [{
+    "id": "d5bb3f74-26ac-462e-967a-c98e28ff38f0",
+    "kind": "wire", "width": 1,
+    "nodes": [
+      {"id": "b6ff7623-41cf-47cb-851a-d26aa73ef587", "cell": [1,1,0], "channel": 0, "pointQ": [0,1,1]},
+      {"id": "b8979d1e-9a8f-4849-9ca6-10e5725745d4", "cell": [1,1,0], "channel": 0, "pointQ": [4,1,1]}
+    ],
+    "spans": [{"id": "6da8418e-980f-4555-8c02-b257e1df5873", "fromNodeId": "b6ff7623-41cf-47cb-851a-d26aa73ef587", "toNodeId": "b8979d1e-9a8f-4849-9ca6-10e5725745d4"}],
+    "tag": "", "identityColor": null
+  }],
+  "joins": [{
+    "id": "646f47ed-bc14-4f1d-97b8-7a64603603cd",
+    "members": [
+      {"targetKind": "connectorNode", "connectorId": "d5bb3f74-26ac-462e-967a-c98e28ff38f0", "nodeId": "b6ff7623-41cf-47cb-851a-d26aa73ef587"},
+      {"targetKind": "componentPin", "objectId": "e7280587-3ff1-4505-bccc-16ce5a38a9a2", "pinId": "feb7cc1b-faa6-4283-830f-79b66d265e78"}
+    ]
+  }]
+}
+```
+
+`tag` is a string. `identityColor` is `null` for the default or a saved `#RRGGBB` color; it identifies the authored wire, while current four-state signal coloring remains derived. A `netLink` uses the same physical node/span form and consumes a channel. The built-in clock Net Link uses reserved `linkName:"@world-clock"`, `linkScope:"world"`, and `sourceKind:"worldClock"`; user-created links cannot claim that reserved name/source kind.
+
+Only a connector may attach to a component/module pin; validate that every pin has at most one physical connector attachment and that a join does not repeat one member. Two paths crossing in the same cell but absent from a common join stay separate. Connector-to-connector placement deliberately targeting the existing path creates a join record. Width and bit-index checks precede commit; no automatic width conversion occurs. An ordinary tag never makes a join. All connector pieces of one derived ordinary net carry the same saved tag under the [tag edit rule](physical-connections.md#crowded-selection-and-invalid-actions); a loaded conflict is invalid authored data, not a reason to silently choose one tag. The simulator derives nets and drivers from this saved route/join structure, and the renderer derives the same electrical distinctions for selection and visible shape.
+
+When breaking a span divides a connector graph into two surviving connected pieces, retire the old connector ID, assign a new connector UUID to each piece, retain unaffected node/span IDs, and update every affected join/selection reference in the [all-or-nothing edit](circuit-time-and-clock.md#safe-pause-and-editing). If one break creates more than two surviving pieces, use fresh connector IDs for every new component and retire the old ID under the same rule. A wholly removed connector leaves no surviving connector ID. Undo may restore the prior authored revision and original identity. No dangling reference may be published or saved.
+
+## Module versions and instances
+
+Each module version `ports[]` item has `id`, case-sensitive `name`, `direction` (`input`, `output`, or `inout`), `width`, `bitOrder`, `localCell`, `pointQ`, and `bitTargets[]`. `pointQ` lies on one exterior face of the rectangular footprint and identifies its quadrant. `bitOrder` records the accepted packed-vector indexing with bit 0 least significant; width is 1–128, and width-1 ports use bit 0. A `bitTargets[]` item has `portBitIndex` and one typed internal endpoint reference using the same `connectorNode`, `componentPin`, or `modulePortBit` reference shape above, scoped to this version's `design`. The target resolves to an authored connection; a derived simulator-net index is forbidden. Each port bit has exactly one mapping. Two distinct exterior ports may map to the same internal net.
+
+The module's `childVersionIds[]` is the sorted unique list of exact versions referenced by nested `moduleInstance` objects in its design. The manifest records that same list; the loader checks equality and the full transitive closure, rejecting direct or indirect recursive containment. `familyId` identifies the reusable family, `versionId` identifies the immutable snapshot, and a placed instance retains both. Two instances of one version share read-only authored definition data if convenient, but their simulation state and instance paths remain separate. An internal part's full live identity is the exact version ID, its local authored ID, and its containing instance-ID chain. Packaging never copies transient Q or event state.
+
+## Global library and recovery
+
+The global module library is separate local durable storage. For version 1, keep a `library-index.json` with `formatVersion:1` and `versions[]`; each index item has `familyId`, `versionId`, `name`, `definitionPath`, lowercase `sha256`, and `archived` boolean. Store each immutable definition at `versions/<versionId>.json` under the app's local library directory, using the same UTF-8 module-version record as a world entry. The index path is relative to that library directory. A library version becomes available across worlds only when its validated file and index item agree; an orphaned version file is not automatically shown as a usable module. The embedded world copy and global copy of the same version must match the expected identity and content hash when compared; copying the original bytes avoids accidental hash changes from reserialization.
+
+A new package operation validates the candidate definition, then publishes its fixed version and library/inventory references together under the [atomic operation rule](circuit-time-and-clock.md#safe-pause-and-editing). Write new library/world data to verified temporary files and use a small recoverable transaction record for a package that must update both durable stores. On restart, complete the validated pair or roll both back to the last valid state before exposing the library and world inventory. Never announce package success while only one side is durable. The exact temporary-file names and transaction journal encoding are implementation details; the visible all-or-nothing behavior is fixed.
+
+On load, use the exact embedded version when valid. A missing global version can be restored from it. A damaged or absent embedded module entry is a recoverable **module** condition if `world.json` and its references remain valid; a valid global exact copy may be used only after matching the expected version identity and integrity hash. Never silently substitute a newer version. If both exact copies are absent or damaged, preserve each affected placed instance as the [specified placeholder](modules-and-packaging.md#library-and-world-independence), retaining the footprint, port layout, and attached world connectors from a separately validated interface snapshot if available. To make that recovery possible without trusting a damaged definition, version 1 `moduleInstance` records also include `interfaceSnapshot` with `sizeCells` and the exact exterior port IDs, names, directions, widths, bit order, local cells, and `pointQ` positions of the pinned version. The loader validates this snapshot against a healthy definition; if the definition is missing, the snapshot supplies only the placeholder interface, not internal circuit behavior. If the snapshot itself is invalid or absent, offer a valid world backup rather than inventing pins or dropping connections. An inventory reference to an unavailable exact version remains visibly unavailable rather than disappearing or resolving to a different version.
+
+## Validation and compatibility
+
+Before presenting a loaded world, validate ZIP paths and bounded decompression, UTF-8 and JSON syntax, `formatVersion`, required entries, duplicate paths/UUIDs, hashes of uncompressed stored bytes, manifest/record identity agreement, referenced exact versions and dependency closure, and recursion prohibition. Within each authored design, validate object/type versions, field types/ranges, finite player numbers, world bounds, full footprints, unique authored and instance IDs, pins and port positions, one connector per pin, route node/span geometry and connectivity, four-channel occupancy, join membership and width, module interface snapshots, and every reference. Do not accept a partly valid topology as a different circuit. A missing/damaged module follows the placeholder path above; a corrupt `world.json` or irrecoverably invalid authored topology leads to backup selection while preserving the damaged file. A save snapshot occurs only after a safe settled time slot and a coherent authored revision; verify the new archive before replacing the current one.
+
+Version 1 readers reject unsupported newer `formatVersion` values without overwriting them. Unknown required record variants or unrecognized fields under version 1 are validation errors rather than silently discarded player data. A later reader migrates a copy, retains the original, and checks that authored identities, geometry, topology, module versions, and specified persistent data retain their meaning. The schema's wire/port records reserve explicit mapping points for later harnesses, Net Links, NVM, undo history, and Education data; a later feature receives a versioned record rather than silently reinterpreting a version 1 field. Loading recreates the derived graph and ordinary runtime state at time zero. It restores configured sources, starts the world clock stopped at level 0 with saved frequency, and initializes an unconfigured SR Q to X, as the [professor save/reopen check](delivery-and-acceptance.md#first-playable-professor-milestone) requires.

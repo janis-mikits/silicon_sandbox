@@ -1,0 +1,40 @@
+# 9 Saving and recovery
+
+## In this file
+
+- [Saved design versus transient simulation](#saved-design-versus-transient-simulation)
+- [Nonvolatile exception](#nonvolatile-exception)
+- [Source startup state](#source-startup-state)
+- [First playable world save container](#first-playable-world-save-container)
+- [Consistent save and recovery](#consistent-save-and-recovery)
+- [World and format operations](#world-and-format-operations)
+
+## Saved design versus transient simulation
+
+Reopening a world starts ordinary simulation at time zero. Save construction and persistent game data: placed-object identities, positions, and rotations/orientations, connector topology, visible colors and tags, harness bit mappings, Net Link names, component and world-clock settings, explicit initial values, player position/view direction, inventory and selected hotbar slot, exact module versions and nested dependencies embedded in the world, and the preceding five minutes of undo/redo history. Do not restore ordinary current signal values, volatile RAM, flip-flop/counter state, module runtime state, simulation time, clock phase, or pending events as a live checkpoint. Reset Simulation starts the currently open design again at time zero without undoing construction or loading an older file. A future true simulator checkpoint is separate work.
+
+**Clock on reopen and reset, 30 September 2026:** Retain the saved configured world-clock frequency, but start the reopened world's clock stopped at logic level 0. A running/stopped state at save time is transient and does not cause automatic clock edges immediately on reopen. Reset Simulation likewise returns simulation time to zero, resets ordinary transient state and clock phase, and leaves the clock stopped at level 0 until P is pressed, retaining the configured frequency. Neither operation alters construction or the persistent NVM exception. Combinational simulation still responds to sources while the world clock is stopped.
+
+## Nonvolatile exception
+
+Runtime-writable nonvolatile memory is intentionally saved at its current contents, including NVM inside placed module instances. It survives load and Reset Simulation until the player explicitly erases or reprograms it. ROM initial contents are design data, while volatile RAM loses current contents on load/reset and follows its configured initialization. Manual saves, autosaves, and normal exit save NVM. A crash may lose writes made since the valid save the player chooses; continuous per-write durability or journaling is only a possible future improvement. Module packaging captures a design memory image, not the live NVM contents of a particular placed instance. Creating/copying a fresh instance initializes from the definition; upgrading an existing instance may replace its stored NVM and therefore requires a warning.
+
+## Source startup state
+
+Save a source’s configured initial On/Off state, width, and four-state value, not its transient state after a runtime click, unless a future checkpoint system is designed. Load and Reset Simulation restore the configured initial state and value. For a Constant Logic Source, On drives its configured scalar or vector value and Off drives zero on every bit, as specified in [Section 6](components-and-rtl-timing.md).
+
+## First playable world save container
+
+**Decision, 30 September 2026:** Use one portable ZIP-format world save file for the first playable, with separate UTF-8 JSON entries. `manifest.json` records the save-format version, world UUID, listed entries, their integrity hashes, and exact referenced module-version IDs and dependencies. `world.json` records the authored world design and other required saved world settings and player data. `modules/<version-id>.json` contains the exact fixed design blueprint for each referenced module version, including its layout, topology, configuration, ports, and nested exact-version references. The save embeds these definitions; loading never silently substitutes a newer library version. Future persistent sections, including per-instance NVM and saved edit history, may use separate entries as those features are implemented under the existing [persistence rules](#saved-design-versus-transient-simulation). Do not save the rebuildable simulation graph or ordinary transient simulation state as authoritative entries.
+
+The manifest records SHA-256 hashes of the uncompressed stored bytes for `world.json` and each module entry. Write and verify a complete new container before making it current under the [consistent-save procedure](#consistent-save-and-recovery). On load, validate the format version, required entries, duplicate entry paths or IDs, UUID references, module dependencies, hashes, and JSON structure before using their data. Apply the [canonical UUID text and value-comparison rule](modules-and-packaging.md#persistent-identity-model) to IDs and references, including duplicate detection. A damaged or missing individual module definition follows the existing [module-placeholder recovery rule](modules-and-packaging.md#library-and-world-independence); a damaged world record follows the backup choice below. Validation never overwrites or silently reassigns a conflicting identity. Treat ZIP entry names and decompressed sizes as bounded input rather than trusting a file simply because it has the world-save extension.
+
+The [first-playable logical JSON schema](first-playable-data-schema.md) is separate from ZIP packaging and defines the version 1 record and reference contract, including the accepted [saved `forward`/`up` orientation encoding](physical-connections.md#post-placement-rotation). A later save-format version may divide large world data into region entries or use another physical encoding if measured save/load cost warrants migration, while retaining the same circuit meaning, exact module references, and copy-preserving migration rule below. Compression level, archive filename extension, future region partition, and C# serializer code remain implementation choices. The first-playable [save/reopen acceptance check](delivery-and-acceptance.md#first-playable-professor-milestone) and [performance targets](performance-and-platforms.md#benchmark) must verify this format in practice.
+
+## Consistent save and recovery
+
+A save takes a consistent snapshot after the current simulation time slot finishes, without visibly pausing or resetting play. Write a new file, verify it, then make it current so an interrupted write does not destroy the last good save. A nonsettling time slot follows the convergence-limit procedure first. Autosave every five minutes while a world is open, including when simulation is paused. Autosaves older than 20 minutes may be removed only when at least four newer backups remain. Save on normal exit. On crash recovery, offer the latest valid autosave and last manual save with timestamps and let the player choose. If a file is damaged, preserve it and offer the latest valid backup instead of silently destroying or replacing it.
+
+## World and format operations
+
+Duplicate World makes an independent world identity and deep copy of design, embedded module definitions, NVM, and saved player position; later edits or NVM writes do not cross-affect the copies. Delete World moves world files to operating-system or in-game recoverable trash and does not delete shared library modules. Save files record a format version. Migration converts a copy and retains the original; an older game version must not silently overwrite a world saved by a newer version. Educational unlocks and overall progress live in a separate local player profile shared across worlds, while an education world saves its own current lesson/challenge position. Library deletion protection must count duplicated worlds as references while they still exist.
