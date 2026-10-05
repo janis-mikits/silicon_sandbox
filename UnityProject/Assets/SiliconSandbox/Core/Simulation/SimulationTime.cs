@@ -30,6 +30,15 @@ namespace SiliconSandbox.Simulation
             return new SimulationTime((ulong)seconds, (long)(total % PicosecondsPerSecond));
         }
 
+        public BigInteger PicosecondsUntil(SimulationTime later)
+        {
+            if (later.CompareTo(this) < 0)
+                throw new ArgumentOutOfRangeException(nameof(later));
+            return ((BigInteger)later.WholeSeconds - WholeSeconds) *
+                PicosecondsPerSecond + later.PicosecondsWithinSecond -
+                PicosecondsWithinSecond;
+        }
+
         public int CompareTo(SimulationTime other)
         {
             var seconds = WholeSeconds.CompareTo(other.WholeSeconds);

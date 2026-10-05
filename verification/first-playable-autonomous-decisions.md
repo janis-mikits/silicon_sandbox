@@ -41,3 +41,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Add a required anchor field to the accepted schema; (2) delete all surviving geometry on a split; (3) treat `nodes[0]` as the saved physical link anchor and convert detached pieces to ordinary wires.
 
 **Recommendation adopted:** Option 3 preserves the accepted schema and the surviving geometry while making the break electrically real. Only the piece containing the first node retains the clock-link identity; detached pieces receive normal split IDs and no link fields. Recorded in the [version 1 schema](../docs/first-playable-data-schema.md#connector-geometry-and-joins).
+
+## 5 October 2026 — Clock phase when stopped and restarted
+
+**Issue:** The accepted clock rules specify stopping, resuming, stepping, and a running frequency change, but not whether a partly elapsed interval survives a stop or what a new frequency does to that frozen remainder.
+
+**Options:** (1) Restart a full half-period on every resume; (2) preserve the remaining simulated time on ordinary stop/resume, but restart a full interval at the new frequency if the setting changes while stopped.
+
+**Recommendation adopted:** Option 2 makes P behave like a pause of the clock phase and ensures a stopped frequency change takes effect on the very next interval. A manual step consumes an edge and leaves the clock stopped at the start of the next interval. Recorded in [circuit time](../docs/circuit-time-and-clock.md#clock-and-event-model).
