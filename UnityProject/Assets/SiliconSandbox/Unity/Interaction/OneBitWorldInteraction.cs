@@ -24,6 +24,9 @@ namespace SiliconSandbox.Interaction
         private RaycastHit hit;
         private bool hasHit;
         private JoinMember? wireStart;
+        private GameObject wirePreviewRoot;
+        private string wirePreviewKey;
+        private ulong wirePreviewRevision;
         private GameObject ghostRoot;
         private GameObject rotationRoot;
         private OneBitRotationPreview rotationPreview;
@@ -66,6 +69,7 @@ namespace SiliconSandbox.Interaction
             OneBitPlayerInventory playerInventory = null)
         {
             ClearRotationPreview();
+            ClearWirePreview();
             if (selectionRoot != null)
             {
                 selectionRoot.SetActive(false);
@@ -103,6 +107,7 @@ namespace SiliconSandbox.Interaction
             {
                 observedRevision = session.Revision;
                 ghostCached = false;
+                wirePreviewKey = null;
             }
             if (Input.GetKeyDown(KeyCode.F1)) hudVisible = !hudVisible;
             if (Input.GetKeyDown(KeyCode.Escape))
@@ -120,6 +125,8 @@ namespace SiliconSandbox.Interaction
                 packageDraft != null) return;
             if (Input.GetKeyDown(KeyCode.E))
             {
+                wireStart = null;
+                ClearWirePreview();
                 inventoryOpen = true;
                 player.SetInterfaceOpen(true);
                 HideGhost();
@@ -130,6 +137,7 @@ namespace SiliconSandbox.Interaction
                 if (Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i)))
                     SelectSlot(i);
             TargetAtCrosshair();
+            UpdateWirePreview();
             if (rotationPreview != null)
             {
                 HideGhost();
@@ -285,6 +293,7 @@ namespace SiliconSandbox.Interaction
                     }
                     else InvalidAction();
                     wireStart = null;
+                    ClearWirePreview();
                 }
                 return;
             }
@@ -320,6 +329,166 @@ namespace SiliconSandbox.Interaction
             }
             else TryEdit(() => session.PlaceComponent(typeId, cell, orientation));
             ghostCached = false;
+        }
+
+        private void UpdateWirePreview()
+        {
+            if (!wireStart.HasValue || SelectedCatalogId() !=
+                OneBitCatalogItemIds.Wire || !hasHit)
+            {
+                ClearWirePreview();
+                return;
+            }
+            var start = wireStart.Value;
+            Func<OneBitPinRouteProposal> propose = null;
+            string key;
+            if (hovered != null && IsPinKind(hovered.Kind))
+            {
+                var target = PickedPin(hovered);
+                key = "pin:" + target.OwnerId.ToString("N") + ":" +
+                    target.PartId.ToString("N");
+                propose = () => OneBitPinRoutePlanner.Plan(
+                    session.Design, start, target);
+            }
+            else if (hovered != null &&
+                     hovered.Kind == WorldPartKind.ConnectorNode)
+            {
+                var target = JoinMember.ConnectorNode(hovered.OwnerId,
+                    hovered.PartId);
+                key = "node:" + target.OwnerId.ToString("N") + ":" +
+                    target.PartId.ToString("N");
+                propose = () => OneBitPinRoutePlanner.PlanToConnectorNode(
+                    session.Design, start, target);
+            }
+            else if (hovered == null &&
+                     hit.collider.GetComponent<PlayableWorldBootstrap>() != null)
+            {
+                PlacementCell(out var cell);
+                key = "cell:" + cell.X + ":" + cell.Y + ":" + cell.Z;
+                propose = () => OneBitPinRoutePlanner.PlanToOpenCell(
+                    session.Design, start, cell);
+            }
+            else
+            {
+                ClearWirePreview();
+                return;
+            }
+            if (wirePreviewRoot != null && key == wirePreviewKey &&
+                wirePreviewRevision == session.Revision)
+                return;
+            ClearWirePreview();
+            wirePreviewKey = key;
+            wirePreviewRevision = session.Revision;
+            wirePreviewRoot = new GameObject("Wire route preview");
+            try { DrawWirePreview(propose().Route); }
+            catch (ArgumentException)
+            {
+                AddWirePreviewPart(PrimitiveType.Sphere,
+                    hovered == null ? hit.point + Vector3.up * 0.2f :
+                    hovered.transform.position,
+                    Vector3.one * 0.25f,
+                    new Color(1f, 0.15f, 0.15f, 0.65f));
+            }
+        }
+
+        private void DrawWirePreview(ConnectorRoute route)
+        {
+            var green = new Color(0.2f, 0.9f, 0.55f, 0.62f);
+            var nodes = new Dictionary<Guid, RouteNode>();
+            foreach (var node in route.Nodes)
+            {
+                nodes.Add(node.Id, node);
+                AddWirePreviewPart(PrimitiveType.Sphere,
+                    PointPosition(node.Cell, node.PointQ) +
+                        Vector3.up * ((node.Channel - 1.5f) * 0.06f),
+                    Vector3.one * 0.18f, green);
+            }
+            foreach (var span in route.Spans)
+            {
+                var first = nodes[span.FromNodeId];
+                var second = nodes[span.ToNodeId];
+                var from = PointPosition(first.Cell, first.PointQ) +
+                    Vector3.up * ((first.Channel - 1.5f) * 0.06f);
+                var to = PointPosition(second.Cell, second.PointQ) +
+                    Vector3.up * ((second.Channel - 1.5f) * 0.06f);
+                if ((to - from).sqrMagnitude < 0.000001f)
+                {
+                    AddWirePreviewPart(PrimitiveType.Sphere, from,
+                        Vector3.one * 0.26f, green);
+                    continue;
+                }
+                if (first.Cell.Equals(second.Cell) &&
+                    (first.PointQ.IsCenter && second.PointQ.IsFacePoint ||
+                     second.PointQ.IsCenter && first.PointQ.IsFacePoint))
+                {
+                    var center = first.PointQ.IsCenter ? from : to;
+                    var face = first.PointQ.IsFacePoint ? from : to;
+                    var point = first.PointQ.IsFacePoint
+                        ? first.PointQ : second.PointQ;
+                    Vector3 bend1;
+                    Vector3 bend2;
+                    if (point.X == 0 || point.X == 4)
+                    {
+                        bend1 = new Vector3(face.x, center.y, center.z);
+                        bend2 = new Vector3(face.x, face.y, center.z);
+                    }
+                    else if (point.Y == 0 || point.Y == 4)
+                    {
+                        bend1 = new Vector3(center.x, face.y, center.z);
+                        bend2 = new Vector3(face.x, face.y, center.z);
+                    }
+                    else
+                    {
+                        bend1 = new Vector3(center.x, center.y, face.z);
+                        bend2 = new Vector3(face.x, center.y, face.z);
+                    }
+                    DrawWirePreviewCylinder(center, bend1, green);
+                    DrawWirePreviewCylinder(bend1, bend2, green);
+                    DrawWirePreviewCylinder(bend2, face, green);
+                    continue;
+                }
+                var xBend = new Vector3(to.x, from.y, from.z);
+                var yBend = new Vector3(to.x, to.y, from.z);
+                DrawWirePreviewCylinder(from, xBend, green);
+                DrawWirePreviewCylinder(xBend, yBend, green);
+                DrawWirePreviewCylinder(yBend, to, green);
+            }
+        }
+
+        private void DrawWirePreviewCylinder(Vector3 from, Vector3 to,
+            Color color)
+        {
+            var delta = to - from;
+            if (delta.sqrMagnitude < 0.000001f) return;
+            var part = AddWirePreviewPart(PrimitiveType.Cylinder,
+                (from + to) * 0.5f,
+                new Vector3(0.15f, delta.magnitude * 0.5f, 0.15f), color);
+            part.transform.rotation = Quaternion.FromToRotation(Vector3.up,
+                delta);
+        }
+
+        private GameObject AddWirePreviewPart(PrimitiveType type,
+            Vector3 position, Vector3 scale, Color color)
+        {
+            var part = GameObject.CreatePrimitive(type);
+            part.transform.SetParent(wirePreviewRoot.transform, false);
+            part.transform.position = position;
+            part.transform.localScale = scale;
+            Destroy(part.GetComponent<Collider>());
+            var renderer = part.GetComponent<Renderer>();
+            var shader = Shader.Find("Transparent/Diffuse");
+            if (shader != null) renderer.material = new Material(shader);
+            renderer.material.color = color;
+            return part;
+        }
+
+        private void ClearWirePreview()
+        {
+            wirePreviewKey = null;
+            if (wirePreviewRoot == null) return;
+            wirePreviewRoot.SetActive(false);
+            Destroy(wirePreviewRoot);
+            wirePreviewRoot = null;
         }
 
         private bool PinOccupied(JoinMember pin)
@@ -784,6 +953,12 @@ namespace SiliconSandbox.Interaction
             if (rotationPreview != null)
             {
                 ClearRotationPreview();
+                return;
+            }
+            if (wireStart.HasValue)
+            {
+                wireStart = null;
+                ClearWirePreview();
                 return;
             }
             if (configureOpen || inventoryOpen || pauseMenuOpen || inspectOpen)
