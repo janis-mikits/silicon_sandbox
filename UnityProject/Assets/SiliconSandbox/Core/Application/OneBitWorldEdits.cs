@@ -41,5 +41,21 @@ namespace SiliconSandbox.Application
             OneBitTopologyGraphBuilder.Build(candidate.Topology);
             return candidate;
         }
+
+        public static OneBitWorldDesign PlaceConnector(OneBitWorldDesign original,
+            ConnectorRoute connector, IEnumerable<ElectricalJoin> joins)
+        {
+            if (original == null || connector == null || joins == null)
+                throw new ArgumentNullException();
+            var routes = new List<ConnectorRoute>(original.Topology.Connectors) { connector };
+            var allJoins = new List<ElectricalJoin>(original.Topology.Joins);
+            allJoins.AddRange(joins);
+            var topology = new OneBitAuthoredTopology(original.Topology.Pins,
+                routes, allJoins);
+            var candidate = new OneBitWorldDesign(original.Bounds,
+                original.Components, topology);
+            OneBitTopologyGraphBuilder.Build(candidate.Topology);
+            return candidate;
+        }
     }
 }

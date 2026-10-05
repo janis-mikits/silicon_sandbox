@@ -8,8 +8,8 @@ rotation confirmation, and full invalid-action feedback are still unfinished.
 stable object/pin IDs, exact versioned pin locations, orientation, source
 startup configuration, and optional initial SR Q. It validates saved pin
 snapshots, occupied cells, world bounds, and component/connector overlap.
-`OneBitWorldEdits.PlaceComponent` builds a complete candidate revision and
-rejects invalid placement before publication. `OneBitWorldSession` reaches a
+`OneBitWorldEdits.PlaceComponent` and `PlaceConnector` build complete
+candidate revisions and reject invalid edits before publication. `OneBitWorldSession` reaches a
 settled pause boundary, rebuilds the derived graph and simulator from that
 candidate, and publishes the authored design, graph, and revision together.
 An unrelated placement preserves a live source's current On/Off state.
@@ -23,6 +23,13 @@ pin positions, disconnected Z inputs, occupied/floor/out-of-bounds/wire-cell
 rejection, corrupted pin snapshots, safe publication, and unchanged design
 and simulation after rejection.
 
+`PlaceConnector` accepts a connector route and its explicit joins in one
+transaction. Geometric contact alone leaves a pin electrically unconnected.
+The new NUnit cases check a source-to-AND wire with and without joins,
+propagation after breaking that wire, an atomic rejection when a second
+connector targets an occupied pin, and two crossing channels that remain
+separate until an explicit center junction is added.
+
 Executed offline, repository-local core compile and harness:
 
 ```sh
@@ -31,4 +38,6 @@ DOTNET_CLI_HOME="$PWD/.verification-tools/home" DOTNET_SKIP_FIRST_TIME_EXPERIENC
 
 Result: exit 0, including `PASS: atomic source/AND placement and occupied-cell
 rejection` and `PASS: safe authored revision publish preserves unrelated
-simulation`. The NUnit suite and Unity build have not run for this change.
+simulation`. The connector extension also exited 0 with `PASS: explicit
+connector joins and authored break propagation`. `git diff --check` exited
+0. The NUnit suite and Unity build have not run for these changes.

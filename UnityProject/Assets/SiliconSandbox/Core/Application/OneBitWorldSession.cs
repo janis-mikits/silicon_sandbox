@@ -43,6 +43,13 @@ namespace SiliconSandbox.Application
             Publish(new OneBitWorldDesign(Design.Bounds, Design.Components, edit.Design));
         }
 
+        public void PlaceConnector(ConnectorRoute connector,
+            IEnumerable<ElectricalJoin> joins)
+        {
+            SafePause();
+            Publish(OneBitWorldEdits.PlaceConnector(Design, connector, joins));
+        }
+
         public void AddJoin(ElectricalJoin join, string chosenTag = null)
         {
             SafePause();
