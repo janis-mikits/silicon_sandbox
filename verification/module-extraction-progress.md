@@ -13,6 +13,15 @@ and rejects duplicate names, occupied exterior positions, or missing targets
 before returning a candidate version. This factory does not publish a library
 entry or world inventory reference.
 
+Authored world revisions can now place the exact version twice with distinct
+instance identities and retained interface snapshots. Port IDs remain stable
+across the two placements. The derived hierarchical plan maps each exterior
+port to its exact internal authored endpoint, expands internal state under its
+instance path, and joins each placed CLK port to the world-clock signal through
+an explicit visible Net Link stub. This is simulation data, independent of
+rendering or camera visibility. Package publication, inventory/UI controls,
+durable saves, and missing-definition recovery are not implemented yet.
+
 Independent NUnit expectations cover fresh IDs and retained clock-stub
 connectivity; exclusion of an orphan route; exact endpoint for a connected
 boundary cut; and separation of two inside pieces whose only original path
@@ -24,7 +33,9 @@ Offline repository-local NUnit command executed from the repository root:
 DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet
 ```
 
-Latest result: 115 passed, 0 failed, 0 ignored. The Play Mode source compile
+Latest result: 119 passed, 0 failed, 0 ignored. The new independent test
+checks the accepted three rising-edge SR sequence for two placed copies:
+1/X, 1/0, then 0/0, with four separate world sources. The Play Mode source compile
 also succeeded with zero warnings and zero errors using the same offline SDK
 environment. This offline harness compiled the
 current Core, Unity runtime, and Edit Mode test sources against installed

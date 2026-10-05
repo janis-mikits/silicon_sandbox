@@ -16,6 +16,11 @@ namespace SiliconSandbox.Application
             if (!world.Bounds.ContainsPlaceable(region.Min) ||
                 !world.Bounds.ContainsPlaceable(region.Max))
                 throw new ArgumentException("Package selection leaves placeable world bounds.");
+            foreach (var module in world.Modules)
+                foreach (var cell in module.OccupiedCells())
+                    if (region.Contains(cell))
+                        throw new NotSupportedException(
+                            "Nested-module package extraction is not available yet.");
 
             var components = new List<PlacedOneBitComponent>();
             var componentIds = new Dictionary<Guid, Guid>();

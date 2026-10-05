@@ -101,11 +101,13 @@ namespace SiliconSandbox.Authoring
     {
         public WorldBounds Bounds { get; }
         public IReadOnlyList<PlacedOneBitComponent> Components { get; }
+        public IReadOnlyList<PlacedOneBitModuleInstance> Modules { get; }
         public OneBitAuthoredTopology Topology { get; }
 
         public OneBitWorldDesign(WorldBounds bounds,
             IEnumerable<PlacedOneBitComponent> components,
-            OneBitAuthoredTopology topology)
+            OneBitAuthoredTopology topology,
+            IEnumerable<PlacedOneBitModuleInstance> modules = null)
         {
             if (components == null || topology == null) throw new ArgumentNullException();
             if (!bounds.IsValid) throw new ArgumentException("Invalid world bounds.");
@@ -114,6 +116,7 @@ namespace SiliconSandbox.Authoring
             var occupied = new HashSet<GridCell>();
             var objectIds = new HashSet<Guid>();
             var expectedPins = new Dictionary<JoinMember, AuthoredPin>();
+            var expectedPorts = new Dictionary<JoinMember, AuthoredModulePortBit>();
             foreach (var component in objects)
             {
                 if (component == null || !objectIds.Add(component.Id) ||
@@ -138,6 +141,40 @@ namespace SiliconSandbox.Authoring
                     !expected.Cell.Equals(pin.Cell) || !expected.PointQ.Equals(pin.PointQ))
                     throw new ArgumentException("Topology pin position disagrees with type/orientation.");
             }
+            var placedModules = new List<PlacedOneBitModuleInstance>(
+                modules ?? Array.Empty<PlacedOneBitModuleInstance>());
+            var instanceIds = new HashSet<Guid>();
+            var instanceNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var module in placedModules)
+            {
+                if (module == null || !objectIds.Add(module.Id) ||
+                    !instanceIds.Add(module.InstanceId) ||
+                    !instanceNames.Add(module.InstanceName))
+                    throw new ArgumentException("Duplicate or invalid placed module.");
+                foreach (var cell in module.OccupiedCells())
+                    if (!bounds.ContainsPlaceable(cell) || !occupied.Add(cell))
+                        throw new ArgumentException("Module footprint is occupied or out of bounds.");
+                foreach (var port in module.BuildPortBits())
+                {
+                    var key = JoinMember.ModulePortBit(port.ObjectId,
+                        port.PortId, port.BitIndex);
+                    if (expectedPorts.ContainsKey(key))
+                        throw new ArgumentException("Duplicate module port bit.");
+                    expectedPorts.Add(key, port);
+                }
+            }
+            if (topology.ModulePorts.Count != expectedPorts.Count)
+                throw new ArgumentException("Topology module ports disagree with placements.");
+            var seenPorts = new HashSet<JoinMember>();
+            foreach (var port in topology.ModulePorts)
+            {
+                var key = JoinMember.ModulePortBit(port.ObjectId,
+                    port.PortId, port.BitIndex);
+                if (!seenPorts.Add(key) || !expectedPorts.TryGetValue(key, out var expected) ||
+                    !expected.Cell.Equals(port.Cell) ||
+                    !expected.PointQ.Equals(port.PointQ))
+                    throw new ArgumentException("Module port position disagrees with interface snapshot.");
+            }
             foreach (var route in topology.Connectors)
             {
                 var routeNodes = new Dictionary<Guid, RouteNode>();
@@ -147,8 +184,8 @@ namespace SiliconSandbox.Authoring
                         throw new ArgumentException("Connector route leaves world bounds.");
                     routeNodes.Add(node.Id, node);
                     if (occupied.Contains(node.Cell) &&
-                        !IsAttachedComponentFaceNode(topology, route.Id, node))
-                        throw new ArgumentException("A connector in a component cell must attach at its exact pin face.");
+                        !IsAttachedPortFaceNode(topology, route.Id, node))
+                        throw new ArgumentException("A connector in an occupied cell must attach at its exact port face.");
                 }
                 foreach (var span in route.Spans)
                     if (routeNodes.TryGetValue(span.FromNodeId, out var from) &&
@@ -157,10 +194,11 @@ namespace SiliconSandbox.Authoring
                         throw new ArgumentException("Connector spans cannot cross a component interior.");
             }
             Components = objects.AsReadOnly();
+            Modules = placedModules.AsReadOnly();
             Topology = topology;
         }
 
-        private static bool IsAttachedComponentFaceNode(OneBitAuthoredTopology topology,
+        private static bool IsAttachedPortFaceNode(OneBitAuthoredTopology topology,
             Guid connectorId, RouteNode node)
         {
             var nodeRef = JoinMember.ConnectorNode(connectorId, node.Id);
@@ -179,6 +217,24 @@ namespace SiliconSandbox.Authoring
                         if (member.Equals(pinRef)) hasPin = true;
                     }
                     if (hasNode && hasPin) return true;
+                }
+            }
+            foreach (var port in topology.ModulePorts)
+            {
+                if (!port.Cell.Equals(node.Cell) ||
+                    !port.PointQ.Equals(node.PointQ)) continue;
+                var portRef = JoinMember.ModulePortBit(port.ObjectId,
+                    port.PortId, port.BitIndex);
+                foreach (var join in topology.Joins)
+                {
+                    var hasNode = false;
+                    var hasPort = false;
+                    foreach (var member in join.Members)
+                    {
+                        if (member.Equals(nodeRef)) hasNode = true;
+                        if (member.Equals(portRef)) hasPort = true;
+                    }
+                    if (hasNode && hasPort) return true;
                 }
             }
             return false;

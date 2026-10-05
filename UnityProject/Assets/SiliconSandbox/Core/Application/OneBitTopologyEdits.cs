@@ -55,7 +55,8 @@ namespace SiliconSandbox.Application
                         route.LinkName, route.LinkScope, route.SourceKind)
                     : route);
             var joins = new List<ElectricalJoin>(original.Joins) { join };
-            return Validated(original.Pins, routes, joins, Guid.Empty, new List<Guid>());
+            return Validated(original.Pins, original.ModulePorts, routes, joins,
+                Guid.Empty, new List<Guid>());
         }
 
         public static TopologyEditResult BreakSpan(OneBitAuthoredTopology original,
@@ -166,15 +167,17 @@ namespace SiliconSandbox.Application
                         : member);
                 joins.Add(new ElectricalJoin(join.Id, members));
             }
-            return Validated(original.Pins, routes, joins,
+            return Validated(original.Pins, original.ModulePorts, routes, joins,
                 pieces.Count > 1 ? connectorId : Guid.Empty, replacementIds);
         }
 
         private static TopologyEditResult Validated(IEnumerable<AuthoredPin> pins,
+            IEnumerable<AuthoredModulePortBit> modulePorts,
             IEnumerable<ConnectorRoute> routes, IEnumerable<ElectricalJoin> joins,
             Guid retired, List<Guid> replacements)
         {
-            var candidate = new OneBitAuthoredTopology(pins, routes, joins);
+            var candidate = new OneBitAuthoredTopology(pins, routes, joins,
+                modulePorts);
             var graph = OneBitTopologyGraphBuilder.Build(candidate);
             return new TopologyEditResult(candidate, graph, retired, replacements);
         }

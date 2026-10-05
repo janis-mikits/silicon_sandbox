@@ -57,6 +57,25 @@ namespace SiliconSandbox.Authoring
         }
     }
 
+    public sealed class AuthoredModulePortBit
+    {
+        public Guid ObjectId { get; }
+        public Guid PortId { get; }
+        public int BitIndex { get; }
+        public GridCell Cell { get; }
+        public QuarterPoint PointQ { get; }
+
+        public AuthoredModulePortBit(Guid objectId, Guid portId, int bitIndex,
+            GridCell cell, QuarterPoint pointQ)
+        {
+            ObjectId = objectId;
+            PortId = portId;
+            BitIndex = bitIndex;
+            Cell = cell;
+            PointQ = pointQ;
+        }
+    }
+
     public sealed class RouteNode
     {
         public Guid Id { get; }
@@ -163,13 +182,17 @@ namespace SiliconSandbox.Authoring
     public sealed class OneBitAuthoredTopology
     {
         public IReadOnlyList<AuthoredPin> Pins { get; }
+        public IReadOnlyList<AuthoredModulePortBit> ModulePorts { get; }
         public IReadOnlyList<ConnectorRoute> Connectors { get; }
         public IReadOnlyList<ElectricalJoin> Joins { get; }
 
         public OneBitAuthoredTopology(IEnumerable<AuthoredPin> pins,
-            IEnumerable<ConnectorRoute> connectors, IEnumerable<ElectricalJoin> joins)
+            IEnumerable<ConnectorRoute> connectors, IEnumerable<ElectricalJoin> joins,
+            IEnumerable<AuthoredModulePortBit> modulePorts = null)
         {
             Pins = Array.AsReadOnly(new List<AuthoredPin>(pins).ToArray());
+            ModulePorts = Array.AsReadOnly(new List<AuthoredModulePortBit>(
+                modulePorts ?? Array.Empty<AuthoredModulePortBit>()).ToArray());
             Connectors = Array.AsReadOnly(new List<ConnectorRoute>(connectors).ToArray());
             Joins = Array.AsReadOnly(new List<ElectricalJoin>(joins).ToArray());
         }

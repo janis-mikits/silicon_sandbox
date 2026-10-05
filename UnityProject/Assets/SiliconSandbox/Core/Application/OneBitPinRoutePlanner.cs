@@ -34,9 +34,9 @@ namespace SiliconSandbox.Application
             JoinMember first, JoinMember second)
         {
             if (design == null) throw new ArgumentNullException(nameof(design));
-            if (first.Kind != JoinTargetKind.ComponentPin ||
-                second.Kind != JoinTargetKind.ComponentPin || first.Equals(second))
-                throw new ArgumentException("Choose two distinct component pins.");
+            if (!IsPhysicalPin(first) || !IsPhysicalPin(second) ||
+                first.Equals(second))
+                throw new ArgumentException("Choose two distinct physical pins.");
             var firstPin = FindPin(design, first);
             var secondPin = FindPin(design, second);
             foreach (var join in design.Topology.Joins)
@@ -56,9 +56,7 @@ namespace SiliconSandbox.Application
             var secondFace = Face(secondPin.PointQ);
             var start = Move(firstPin.Cell, firstFace);
             var finish = Move(secondPin.Cell, secondFace);
-            var blockedCells = new HashSet<GridCell>();
-            foreach (var component in design.Components)
-                blockedCells.Add(component.AnchorCell);
+            var blockedCells = BlockedCells(design);
             for (var channel = 0; channel < 4; channel++)
             {
                 var occupied = new HashSet<GridCell>(blockedCells);
@@ -81,9 +79,9 @@ namespace SiliconSandbox.Application
             OneBitWorldDesign design, JoinMember pin, JoinMember targetNode)
         {
             if (design == null) throw new ArgumentNullException(nameof(design));
-            if (pin.Kind != JoinTargetKind.ComponentPin ||
+            if (!IsPhysicalPin(pin) ||
                 targetNode.Kind != JoinTargetKind.ConnectorNode)
-                throw new ArgumentException("Choose a free component pin and a connector node.");
+                throw new ArgumentException("Choose a free physical pin and a connector node.");
             var sourcePin = FindPin(design, pin);
             RouteNode target = null;
             foreach (var route in design.Topology.Connectors)
@@ -94,15 +92,17 @@ namespace SiliconSandbox.Application
             foreach (var component in design.Components)
                 if (component.AnchorCell.Equals(target.Cell))
                     throw new ArgumentException("Target a connector node outside a component body.");
+            foreach (var module in design.Modules)
+                foreach (var cell in module.OccupiedCells())
+                    if (cell.Equals(target.Cell))
+                        throw new ArgumentException("Target a connector node outside a module body.");
             foreach (var join in design.Topology.Joins)
                 foreach (var member in join.Members)
                     if (member.Equals(pin))
                         throw new ArgumentException("The selected pin already has a connector.");
 
             var start = Move(sourcePin.Cell, Face(sourcePin.PointQ));
-            var blockedComponents = new HashSet<GridCell>();
-            foreach (var component in design.Components)
-                blockedComponents.Add(component.AnchorCell);
+            var blockedComponents = BlockedCells(design);
             for (var channel = 0; channel < 4; channel++)
             {
                 var occupied = new HashSet<GridCell>(blockedComponents);
@@ -257,7 +257,26 @@ namespace SiliconSandbox.Application
             foreach (var pin in design.Topology.Pins)
                 if (member.Equals(JoinMember.ComponentPin(pin.ObjectId, pin.PinId)))
                     return pin;
-            throw new ArgumentException("Unknown component pin.");
+            foreach (var port in design.Topology.ModulePorts)
+                if (member.Equals(JoinMember.ModulePortBit(port.ObjectId,
+                    port.PortId, port.BitIndex)))
+                    return new AuthoredPin(port.ObjectId, port.PortId,
+                        port.Cell, port.PointQ);
+            throw new ArgumentException("Unknown physical pin.");
+        }
+
+        private static bool IsPhysicalPin(JoinMember member) =>
+            member.Kind == JoinTargetKind.ComponentPin ||
+            member.Kind == JoinTargetKind.ModulePortBit && member.BitIndex == 0;
+
+        private static HashSet<GridCell> BlockedCells(OneBitWorldDesign design)
+        {
+            var blocked = new HashSet<GridCell>();
+            foreach (var component in design.Components)
+                blocked.Add(component.AnchorCell);
+            foreach (var module in design.Modules)
+                foreach (var cell in module.OccupiedCells()) blocked.Add(cell);
+            return blocked;
         }
 
         private static GridDirection Face(QuarterPoint point)

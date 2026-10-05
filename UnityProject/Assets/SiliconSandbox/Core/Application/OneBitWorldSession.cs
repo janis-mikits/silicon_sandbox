@@ -11,6 +11,7 @@ namespace SiliconSandbox.Application
     // subscribe to successful revision changes; they never own the circuit.
     public sealed class OneBitWorldSession
     {
+        private Dictionary<Guid, OneBitModuleVersion> versions;
         public OneBitWorldDesign Design { get; private set; }
         public BuiltOneBitCircuitPlan Built { get; private set; }
         public GraphDrivenOneBitCircuit Circuit { get; }
@@ -18,10 +19,14 @@ namespace SiliconSandbox.Application
         public WorldSimulationScheduler Scheduler { get; }
         public ulong Revision { get; private set; }
 
-        public OneBitWorldSession(OneBitWorldDesign design, string frequencyHz = "10")
+        public OneBitWorldSession(OneBitWorldDesign design, string frequencyHz = "10",
+            IReadOnlyDictionary<Guid, OneBitModuleVersion> moduleVersions = null)
         {
             Design = design ?? throw new ArgumentNullException(nameof(design));
-            Built = Build(design);
+            versions = moduleVersions == null
+                ? new Dictionary<Guid, OneBitModuleVersion>()
+                : new Dictionary<Guid, OneBitModuleVersion>(moduleVersions);
+            Built = Build(design, versions);
             Circuit = new GraphDrivenOneBitCircuit(Built.Plan);
             Scheduler = new WorldSimulationScheduler(Circuit, frequencyHz);
             Inspector = MakeInspector(design, Built, Circuit);
@@ -37,12 +42,22 @@ namespace SiliconSandbox.Application
                 orientation, sourceOnValue, sourceInitialOn, srInitialQ, tag));
         }
 
+        public void PlaceModule(OneBitModuleVersion version, string instanceName,
+            GridCell anchorCell, GridOrientation orientation)
+        {
+            if (version == null) throw new ArgumentNullException(nameof(version));
+            SafePause();
+            Publish(OneBitWorldEdits.PlaceModule(Design, version, instanceName,
+                anchorCell, orientation), version);
+        }
+
         public void BreakSpan(Guid connectorId, Guid spanId)
         {
             SafePause();
             var edit = OneBitTopologyEdits.BreakSpan(Design.Topology,
                 connectorId, spanId);
-            Publish(new OneBitWorldDesign(Design.Bounds, Design.Components, edit.Design));
+            Publish(new OneBitWorldDesign(Design.Bounds, Design.Components,
+                edit.Design, Design.Modules));
         }
 
         public void PlaceConnector(ConnectorRoute connector,
@@ -66,6 +81,13 @@ namespace SiliconSandbox.Application
             Publish(OneBitWorldEdits.AttachWorldClockPin(Design, srObjectId));
         }
 
+        public void AttachWorldClockPort(Guid moduleObjectId, Guid portId)
+        {
+            SafePause();
+            Publish(OneBitWorldEdits.AttachWorldClockPort(Design,
+                moduleObjectId, portId));
+        }
+
         public void ConnectPinToNode(JoinMember pin, JoinMember targetNode)
         {
             SafePause();
@@ -79,7 +101,8 @@ namespace SiliconSandbox.Application
         {
             SafePause();
             var edit = OneBitTopologyEdits.AddJoin(Design.Topology, join, chosenTag);
-            Publish(new OneBitWorldDesign(Design.Bounds, Design.Components, edit.Design));
+            Publish(new OneBitWorldDesign(Design.Bounds, Design.Components,
+                edit.Design, Design.Modules));
         }
 
         public void ConfigureSource(Guid sourceId, LogicBit onValue, bool initialOn)
@@ -88,7 +111,7 @@ namespace SiliconSandbox.Application
             var candidate = OneBitWorldEdits.ConfigureSource(Design,
                 sourceId, onValue, initialOn);
             var nextRevision = checked(Revision + 1);
-            var built = Build(candidate);
+            var built = Build(candidate, versions);
             Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
             Design = candidate;
             Built = built;
@@ -117,23 +140,32 @@ namespace SiliconSandbox.Application
             Scheduler.PauseSimulation();
         }
 
-        private void Publish(OneBitWorldDesign candidate)
+        private void Publish(OneBitWorldDesign candidate,
+            OneBitModuleVersion addedVersion = null)
         {
             var nextRevision = checked(Revision + 1);
-            var built = Build(candidate);
+            var nextVersions = new Dictionary<Guid, OneBitModuleVersion>(versions);
+            if (addedVersion != null)
+            {
+                if (nextVersions.TryGetValue(addedVersion.VersionId, out var existing) &&
+                    !ReferenceEquals(existing, addedVersion))
+                    throw new ArgumentException("Conflicting exact module version identity.");
+                nextVersions[addedVersion.VersionId] = addedVersion;
+            }
+            var built = Build(candidate, nextVersions);
             Circuit.ReplacePlan(built.Plan);
+            versions = nextVersions;
             Design = candidate;
             Built = built;
             Inspector = MakeInspector(candidate, built, Circuit);
             Revision = nextRevision;
         }
 
-        private static BuiltOneBitCircuitPlan Build(OneBitWorldDesign design)
+        private static BuiltOneBitCircuitPlan Build(OneBitWorldDesign design,
+            IReadOnlyDictionary<Guid, OneBitModuleVersion> moduleVersions)
         {
-            var components = new List<OneBitComponent>();
-            foreach (var placed in design.Components)
-                components.Add(placed.RuntimeDescriptor());
-            return OneBitCircuitPlanBuilder.Build(design.Topology, components);
+            return OneBitHierarchicalCircuitPlanBuilder.Build(design,
+                moduleVersions);
         }
 
         private static OneBitCircuitInspection MakeInspector(OneBitWorldDesign design,

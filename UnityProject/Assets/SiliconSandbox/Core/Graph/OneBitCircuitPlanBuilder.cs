@@ -8,14 +8,23 @@ namespace SiliconSandbox.Graph
     public sealed class BuiltOneBitCircuitPlan
     {
         private readonly Dictionary<JoinMember, int> netIndexes;
+        private readonly Dictionary<(Guid instanceId, JoinMember endpoint), int>
+            internalNetIndexes;
         public OneBitTopologyGraph Graph { get; }
         public OneBitCircuitPlan Plan { get; }
 
         internal BuiltOneBitCircuitPlan(OneBitTopologyGraph graph, OneBitCircuitPlan plan,
-            Dictionary<JoinMember, int> netIndexes)
-        { Graph = graph; Plan = plan; this.netIndexes = netIndexes; }
+            Dictionary<JoinMember, int> netIndexes,
+            Dictionary<(Guid, JoinMember), int> internalNetIndexes = null)
+        {
+            Graph = graph; Plan = plan; this.netIndexes = netIndexes;
+            this.internalNetIndexes = internalNetIndexes ??
+                new Dictionary<(Guid, JoinMember), int>();
+        }
 
         public int NetIndex(JoinMember member) => netIndexes[member];
+        public int NetIndex(Guid instanceId, JoinMember internalEndpoint) =>
+            internalNetIndexes[(instanceId, internalEndpoint)];
     }
 
     // Converts exact authored pin/route references into transient execution indexes.

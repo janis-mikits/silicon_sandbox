@@ -62,6 +62,17 @@ namespace SiliconSandbox.Graph
                 AddMember(JoinMember.ComponentPin(pin.ObjectId, pin.PinId), pin.Cell, pin.PointQ);
             }
 
+            foreach (var port in design.ModulePorts)
+            {
+                if (port == null) throw Invalid("Null module port bit.");
+                if (objectIds.Add(port.ObjectId)) AddId(allIds, port.ObjectId);
+                if (port.PortId == Guid.Empty) throw Invalid("Empty module port ID.");
+                if (port.BitIndex != 0 || !port.PointQ.IsFacePoint)
+                    throw Invalid("Invalid one-bit module port position or bit index.");
+                AddMember(JoinMember.ModulePortBit(port.ObjectId, port.PortId, 0),
+                    port.Cell, port.PointQ);
+            }
+
             foreach (var route in design.Connectors)
             {
                 if (route == null) throw Invalid("Null connector.");
@@ -146,7 +157,8 @@ namespace SiliconSandbox.Graph
                 }
                 if (connectorIds.Count == 0) throw Invalid("Pins cannot join without a connector.");
                 foreach (var member in join.Members)
-                    if (member.Kind == JoinTargetKind.ComponentPin)
+                    if (member.Kind == JoinTargetKind.ComponentPin ||
+                        member.Kind == JoinTargetKind.ModulePortBit)
                     {
                         if (connectorIds.Count != 1 || attachedPins.ContainsKey(member))
                             throw Invalid("A pin accepts one physical connector attachment.");
