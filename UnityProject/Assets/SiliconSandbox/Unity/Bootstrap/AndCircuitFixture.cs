@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Contracts;
 using SiliconSandbox.Graph;
@@ -22,29 +23,29 @@ namespace SiliconSandbox.Bootstrap
         private TextMesh bLabel;
         private TextMesh yLabel;
         private bool built;
+        private AndFixtureDesign authoredFixture;
+        private System.Guid hoveredConnectorId;
+        private System.Guid selectedConnectorId;
 
         public OneBitAndCircuit Circuit { get; private set; }
+        public AndFixtureInspection Inspector { get; private set; }
+        public OneBitAuthoredTopology AuthoredTopology => authoredFixture?.Topology;
 
         public void Build()
         {
             if (built) return;
             built = true;
-            var authoredFixture = AndFixtureDesign.Create();
+            authoredFixture = AndFixtureDesign.Create();
             Circuit = new OneBitAndCircuit(AndFixtureGraphBuilder.Build(authoredFixture));
+            Inspector = new AndFixtureInspection(authoredFixture, Circuit);
 
             CreateBody("Fixture Source A", new Vector3(10.5f, 1.5f, 14.5f), new Color(0.65f, 0.65f, 0.8f));
             CreateBody("Fixture Source B", new Vector3(10.5f, 1.5f, 17.5f), new Color(0.65f, 0.65f, 0.8f));
             CreateBody(GateObjectName, new Vector3(16.5f, 1.5f, 15.5f), new Color(0.85f, 0.7f, 0.3f));
 
-            MakeRoute(AConnectorName, aRenderers,
-                new Vector3(11f, 1.25f, 14.25f), new Vector3(14f, 1.25f, 14.25f),
-                new Vector3(14f, 1.25f, 15.25f), new Vector3(16f, 1.25f, 15.25f));
-            MakeRoute(BConnectorName, bRenderers,
-                new Vector3(11f, 1.25f, 17.25f), new Vector3(13f, 1.25f, 17.25f),
-                new Vector3(13f, 1.25f, 15.25f), new Vector3(13f, 1.75f, 15.25f),
-                new Vector3(16f, 1.75f, 15.25f));
-            MakeRoute(YConnectorName, yRenderers,
-                new Vector3(17f, 1.25f, 15.25f), new Vector3(20f, 1.25f, 15.25f));
+            MakeRoute(AConnectorName, aRenderers, authoredFixture.Topology.Connectors[0]);
+            MakeRoute(BConnectorName, bRenderers, authoredFixture.Topology.Connectors[1]);
+            MakeRoute(YConnectorName, yRenderers, authoredFixture.Topology.Connectors[2]);
 
             aLabel = MakeLabel("Fixture A Label", new Vector3(10f, 2.4f, 14f));
             bLabel = MakeLabel("Fixture B Label", new Vector3(10f, 2.4f, 17f));
@@ -71,8 +72,56 @@ namespace SiliconSandbox.Bootstrap
                 SetInputs(Next(Circuit.SourceA.Drive), Circuit.SourceB.Drive);
             if (Input.GetKeyDown(KeyCode.Alpha2))
                 SetInputs(Circuit.SourceA.Drive, Next(Circuit.SourceB.Drive));
+            var camera = Camera.main;
+            hoveredConnectorId = System.Guid.Empty;
+            if (camera != null && Physics.Raycast(camera.transform.position,
+                    camera.transform.forward, out var hit, 15f))
+            {
+                var part = hit.collider.GetComponent<RoutePartIdentity>();
+                if (part != null) hoveredConnectorId = part.ConnectorId;
+            }
+            if (Input.GetKeyDown(KeyCode.I) && hoveredConnectorId != System.Guid.Empty)
+                selectedConnectorId = hoveredConnectorId;
+            if (Input.GetKeyDown(KeyCode.Escape)) selectedConnectorId = System.Guid.Empty;
             if (Circuit.A.Value == LogicBit.X || Circuit.B.Value == LogicBit.X || Circuit.Y.Value == LogicBit.X)
                 RefreshPresentation();
+        }
+
+        private void OnGUI()
+        {
+            if (!built || Inspector == null) return;
+            if (hoveredConnectorId != System.Guid.Empty)
+            {
+                var quick = Inspector.InspectConnector(hoveredConnectorId);
+                GUI.Box(new Rect(12, 12, 390, 48),
+                    "Wire  width " + quick.Width + "  value " + quick.Value.ToSymbol() +
+                    "  connections " + quick.ConnectedPins.Count + "  tag " + quick.Tag);
+            }
+            if (selectedConnectorId == System.Guid.Empty) return;
+            var detail = Inspector.InspectConnector(selectedConnectorId);
+            var connections = new List<string>();
+            foreach (var pin in detail.ConnectedPins)
+                connections.Add(PinName(pin));
+            GUI.Box(new Rect(12, 68, 500, 148),
+                "Inspect one-bit wire: " + detail.Value.ToSymbol() + "\n" +
+                "Connections: " + string.Join(", ", connections) + "\n" +
+                "Active drivers: " + detail.ActiveDrivers.Count + "\n" +
+                detail.Explanation);
+        }
+
+        private string PinName(JoinMember pin)
+        {
+            if (pin.Equals(JoinMember.ComponentPin(authoredFixture.SourceA.Id, authoredFixture.SourceA.Pin("OUT").PinId)))
+                return "Source A.OUT";
+            if (pin.Equals(JoinMember.ComponentPin(authoredFixture.SourceB.Id, authoredFixture.SourceB.Pin("OUT").PinId)))
+                return "Source B.OUT";
+            if (pin.Equals(JoinMember.ComponentPin(authoredFixture.Gate.Id, authoredFixture.Gate.Pin("A").PinId)))
+                return "AND.A";
+            if (pin.Equals(JoinMember.ComponentPin(authoredFixture.Gate.Id, authoredFixture.Gate.Pin("B").PinId)))
+                return "AND.B";
+            if (pin.Equals(JoinMember.ComponentPin(authoredFixture.Gate.Id, authoredFixture.Gate.Pin("Y").PinId)))
+                return "AND.Y";
+            return pin.OwnerId.ToString("D") + "." + pin.PartId.ToString("D");
         }
 
         private static LogicBit Next(LogicBit value)
@@ -119,26 +168,59 @@ namespace SiliconSandbox.Bootstrap
             return body;
         }
 
-        private static void MakeRoute(string name, List<Renderer> renderers, params Vector3[] points)
+        private static void MakeRoute(string name, List<Renderer> renderers, ConnectorRoute route)
         {
             var root = new GameObject(name);
             var identityCap = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             identityCap.name = name + " Identity Cap";
             identityCap.transform.SetParent(root.transform);
-            identityCap.transform.position = points[0];
+            identityCap.transform.position = Position(route.Nodes[0]);
             identityCap.transform.localScale = Vector3.one * 0.17f;
             identityCap.GetComponent<Renderer>().material.color = new Color(0.8f, 0.8f, 0.75f);
-            for (var i = 1; i < points.Length; i++)
+            identityCap.AddComponent<RoutePartIdentity>().InitializeNode(route.Id, route.Nodes[0].Id);
+            var nodes = new Dictionary<System.Guid, RouteNode>();
+            foreach (var node in route.Nodes)
             {
-                var segment = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                segment.name = name + " Segment " + i;
-                segment.transform.SetParent(root.transform);
-                var delta = points[i] - points[i - 1];
-                segment.transform.position = (points[i] + points[i - 1]) / 2f;
-                segment.transform.rotation = Quaternion.FromToRotation(Vector3.up, delta);
-                segment.transform.localScale = new Vector3(0.25f, delta.magnitude / 2f, 0.25f);
-                renderers.Add(segment.GetComponent<Renderer>());
+                nodes.Add(node.Id, node);
+                var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                marker.name = name + " Node " + node.Id.ToString("D");
+                marker.transform.SetParent(root.transform);
+                marker.transform.position = Position(node);
+                marker.transform.localScale = Vector3.one * 0.25f;
+                marker.AddComponent<RoutePartIdentity>().InitializeNode(route.Id, node.Id);
+                renderers.Add(marker.GetComponent<Renderer>());
             }
+            foreach (var span in route.Spans)
+            {
+                var from = Position(nodes[span.FromNodeId]);
+                var to = Position(nodes[span.ToNodeId]);
+                var xBend = new Vector3(to.x, from.y, from.z);
+                var yBend = new Vector3(to.x, to.y, from.z);
+                MakeSegment(name, route.Id, span.Id, root.transform, renderers, from, xBend);
+                MakeSegment(name, route.Id, span.Id, root.transform, renderers, xBend, yBend);
+                MakeSegment(name, route.Id, span.Id, root.transform, renderers, yBend, to);
+            }
+        }
+
+        private static Vector3 Position(RouteNode node) =>
+            new Vector3(node.Cell.X + node.PointQ.X * 0.25f,
+                node.Cell.Y + node.PointQ.Y * 0.25f,
+                node.Cell.Z + node.PointQ.Z * 0.25f);
+
+        private static void MakeSegment(string name, System.Guid connectorId, System.Guid spanId,
+            Transform parent, List<Renderer> renderers,
+            Vector3 from, Vector3 to)
+        {
+            var delta = to - from;
+            if (delta.sqrMagnitude < 0.000001f) return;
+            var segment = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            segment.name = name + " Segment " + renderers.Count;
+            segment.transform.SetParent(parent);
+            segment.transform.position = (from + to) / 2f;
+            segment.transform.rotation = Quaternion.FromToRotation(Vector3.up, delta);
+            segment.transform.localScale = new Vector3(0.25f, delta.magnitude / 2f, 0.25f);
+            segment.AddComponent<RoutePartIdentity>().InitializeSpan(connectorId, spanId);
+            renderers.Add(segment.GetComponent<Renderer>());
         }
 
         private static TextMesh MakeLabel(string name, Vector3 position)

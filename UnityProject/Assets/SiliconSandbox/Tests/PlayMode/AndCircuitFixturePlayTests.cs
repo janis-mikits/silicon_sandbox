@@ -23,6 +23,16 @@ namespace SiliconSandbox.Tests.PlayMode
             Assert.That(GameObject.Find(AndCircuitFixture.BConnectorName), Is.Not.Null);
             Assert.That(GameObject.Find(AndCircuitFixture.YConnectorName), Is.Not.Null);
             Assert.That(GameObject.Find(AndCircuitFixture.AConnectorName + " Identity Cap"), Is.Not.Null);
+            Assert.That(fixture.AuthoredTopology, Is.Not.Null);
+            var routeParts = Object.FindObjectsByType<RoutePartIdentity>(FindObjectsSortMode.None);
+            Assert.That(routeParts.Length, Is.GreaterThan(0));
+            foreach (var part in routeParts)
+            {
+                Assert.That(part.GetComponent<Collider>(), Is.Not.Null);
+                Assert.That(part.SpanId != System.Guid.Empty || part.NodeId != System.Guid.Empty,
+                    Is.True);
+                Assert.That(part.ConnectorId, Is.Not.EqualTo(System.Guid.Empty));
+            }
 
             var cases = new[]
             {
