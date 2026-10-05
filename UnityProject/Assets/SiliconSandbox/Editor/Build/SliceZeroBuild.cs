@@ -12,6 +12,8 @@ namespace SiliconSandbox.EditorBuild
     public static class SliceZeroBuild
     {
         public const string ScenePath = "Assets/SiliconSandbox/Scenes/FlatWorld.unity";
+        public const string PlayableScenePath =
+            "Assets/SiliconSandbox/Scenes/PlayableWorld.unity";
 
         public static void EnsureScene()
         {
@@ -50,6 +52,8 @@ namespace SiliconSandbox.EditorBuild
         public static void BuildPlayer()
         {
             EnsureScene();
+            if (!File.Exists(PlayableScenePath))
+                throw new InvalidOperationException("Playable scene is missing.");
             PlayerSettings.productName = "SiliconSandbox";
             var target = EditorUserBuildSettings.activeBuildTarget;
             string destination;
@@ -63,7 +67,7 @@ namespace SiliconSandbox.EditorBuild
             Directory.CreateDirectory(Path.GetDirectoryName(destination));
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
-                scenes = new[] { ScenePath },
+                scenes = new[] { PlayableScenePath, ScenePath },
                 locationPathName = destination,
                 target = target,
                 options = BuildOptions.None
@@ -76,7 +80,11 @@ namespace SiliconSandbox.EditorBuild
 
         private static void ConfigureBuildScene()
         {
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            EditorBuildSettings.scenes = new[]
+            {
+                new EditorBuildSettingsScene(PlayableScenePath, true),
+                new EditorBuildSettingsScene(ScenePath, true)
+            };
         }
     }
 }

@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/SiliconSandbox/Scenes/PlayableWorld.unity
+    guid: 1e83a81723314b8795eb06318eebfb2e
+  - enabled: 1
     path: Assets/SiliconSandbox/Scenes/FlatWorld.unity
     guid: ed65e3ca53f3c49b992ca6529ee9036b
   m_configObjects: {}

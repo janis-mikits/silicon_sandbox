@@ -14,6 +14,7 @@ namespace SiliconSandbox.Application
         public OneBitWorldDesign Design { get; private set; }
         public BuiltOneBitCircuitPlan Built { get; private set; }
         public GraphDrivenOneBitCircuit Circuit { get; }
+        public OneBitCircuitInspection Inspector { get; private set; }
         public WorldSimulationScheduler Scheduler { get; }
         public ulong Revision { get; private set; }
 
@@ -23,6 +24,7 @@ namespace SiliconSandbox.Application
             Built = Build(design);
             Circuit = new GraphDrivenOneBitCircuit(Built.Plan);
             Scheduler = new WorldSimulationScheduler(Circuit, frequencyHz);
+            Inspector = MakeInspector(design, Built, Circuit);
         }
 
         public void PlaceComponent(string typeId, GridCell anchorCell,
@@ -75,6 +77,7 @@ namespace SiliconSandbox.Application
             Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
             Design = candidate;
             Built = built;
+            Inspector = MakeInspector(candidate, built, Circuit);
             Revision = nextRevision;
         }
 
@@ -106,6 +109,7 @@ namespace SiliconSandbox.Application
             Circuit.ReplacePlan(built.Plan);
             Design = candidate;
             Built = built;
+            Inspector = MakeInspector(candidate, built, Circuit);
             Revision = nextRevision;
         }
 
@@ -115,6 +119,15 @@ namespace SiliconSandbox.Application
             foreach (var placed in design.Components)
                 components.Add(placed.RuntimeDescriptor());
             return OneBitCircuitPlanBuilder.Build(design.Topology, components);
+        }
+
+        private static OneBitCircuitInspection MakeInspector(OneBitWorldDesign design,
+            BuiltOneBitCircuitPlan built, GraphDrivenOneBitCircuit circuit)
+        {
+            var components = new List<OneBitComponent>();
+            foreach (var placed in design.Components)
+                components.Add(placed.RuntimeDescriptor());
+            return new OneBitCircuitInspection(design.Topology, components, built, circuit);
         }
     }
 }

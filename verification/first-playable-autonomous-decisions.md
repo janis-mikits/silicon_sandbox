@@ -73,3 +73,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Defer the action until Resume; (2) settle its combinational effect immediately at the current simulated time without stepping the clock.
 
 **Recommendation adopted:** Option 2 keeps the source usable immediately after placement and does not invent a clock edge. The authored initial state is unaffected. Recorded in [circuit time](../docs/circuit-time-and-clock.md#safe-pause-and-editing).
+
+## 5 October 2026 — Two-pin wire shortcut for the first playable
+
+**Issue:** The accepted connector rules require right-click placement, exact pin targeting, and explicit joins, but do not prescribe how a player lays out the initial free-pin-to-free-pin path.
+
+**Options:** (1) Require every route segment to be placed manually before the small circuit can be built; (2) provide a two-target one-bit wire shortcut that previews and commits an available path atomically, while retaining authored nodes, spans, channels, and explicit joins.
+
+**Recommendation adopted:** Option 2 makes the professor circuit practical to build without changing the saved topology or the separate junction/crossing rules. The shortcut does not make contact alone electrically meaningful. Recorded in [building controls](../docs/building-and-interface.md#default-controls).

@@ -32,6 +32,18 @@ namespace SiliconSandbox.Tests.EditMode
             Assert.That(session.Built.Graph.Connected(output, input), Is.True);
             Assert.That(session.Circuit.Net(session.Built.NetIndex(input)).Value,
                 Is.EqualTo(LogicBit.Zero));
+            var inspected = session.Inspector.InspectConnector(
+                session.Design.Topology.Connectors[0].Id);
+            Assert.That(inspected.Value, Is.EqualTo(LogicBit.Zero));
+            Assert.That(inspected.ConnectedPins.Count, Is.EqualTo(2));
+            var foundOutput = false;
+            var foundInput = false;
+            foreach (var pin in inspected.ConnectedPins)
+            {
+                if (pin.Equals(output)) foundOutput = true;
+                if (pin.Equals(input)) foundInput = true;
+            }
+            Assert.That(foundOutput && foundInput, Is.True);
         }
 
         [Test]
