@@ -24,6 +24,18 @@ namespace SiliconSandbox.Interaction
         public void SetCameraPivot(Transform pivot) => cameraPivot = pivot;
         public void SetWorldBounds(WorldBounds bounds) => worldBounds = bounds;
 
+        public void Teleport(Vector3 position)
+        {
+            // CharacterController.Move uses native collision state. Reset it
+            // when loading a saved pose so the next frame cannot restore the
+            // pre-load location.
+            if (character == null) character = GetComponent<CharacterController>();
+            character.enabled = false;
+            transform.position = position;
+            character.enabled = true;
+            verticalVelocity = 0f;
+        }
+
         public void SetViewDirection(Vector3 direction)
         {
             if (direction.sqrMagnitude < 0.999f ||

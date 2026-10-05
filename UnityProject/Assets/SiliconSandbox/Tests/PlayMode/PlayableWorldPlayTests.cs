@@ -121,13 +121,14 @@ namespace SiliconSandbox.Tests.PlayMode
             Assert.That(bootstrap.Session.Circuit.Source(source.Id).IsOn, Is.True);
 
             bootstrap.OpenWorld(saved);
+            Assert.That(bootstrap.Session.Scheduler.Now,
+                Is.EqualTo(SiliconSandbox.Simulation.SimulationTime.Zero),
+                "Reopen starts at time zero before the next live frame advances.");
             yield return null;
             Assert.That(bootstrap.Session.Design.Components[0].Id,
                 Is.EqualTo(source.Id));
             Assert.That(bootstrap.Session.Circuit.Source(source.Id).IsOn,
                 Is.False);
-            Assert.That(bootstrap.Session.Scheduler.Now,
-                Is.EqualTo(SiliconSandbox.Simulation.SimulationTime.Zero));
             Assert.That(bootstrap.Session.Scheduler.ClockLevel,
                 Is.EqualTo(LogicBit.Zero));
             Assert.That(bootstrap.Inventory.SelectedHotbarSlot, Is.EqualTo(3));

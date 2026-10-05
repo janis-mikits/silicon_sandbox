@@ -1,7 +1,7 @@
 {
   "name": "SiliconSandbox.Persistence",
   "rootNamespace": "SiliconSandbox.Persistence",
-  "references": ["SiliconSandbox.Authoring"],
+  "references": ["SiliconSandbox.Authoring", "SiliconSandbox.Contracts", "SiliconSandbox.Graph"],
   "autoReferenced": false,
   "noEngineReferences": true
 }

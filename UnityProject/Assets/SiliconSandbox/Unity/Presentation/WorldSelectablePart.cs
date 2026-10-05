@@ -17,7 +17,7 @@ namespace SiliconSandbox.Presentation
     // design, save, or electrical identities.
     public sealed class WorldSelectablePart : MonoBehaviour
     {
-        private readonly MaterialPropertyBlock feedback = new MaterialPropertyBlock();
+        private MaterialPropertyBlock feedback;
         private Renderer partRenderer;
         private float invalidUntil;
         private bool wasInvalid;
@@ -27,6 +27,11 @@ namespace SiliconSandbox.Presentation
         public WorldPartKind Kind { get; private set; }
         public Guid OwnerId { get; private set; }
         public Guid PartId { get; private set; }
+
+        private void Awake()
+        {
+            feedback = new MaterialPropertyBlock();
+        }
 
         public void Initialize(WorldPartKind kind, Guid ownerId, Guid partId)
         {

@@ -38,8 +38,7 @@ namespace SiliconSandbox.Presentation
             new Dictionary<int, List<Renderer>>();
         private readonly Dictionary<int, LogicBit> shownSignalValues =
             new Dictionary<int, LogicBit>();
-        private readonly MaterialPropertyBlock signalProperties =
-            new MaterialPropertyBlock();
+        private MaterialPropertyBlock signalProperties;
         private Transform generatedRoot;
         private ulong shownRevision = ulong.MaxValue;
         private OneBitWorldSession session;
@@ -52,6 +51,11 @@ namespace SiliconSandbox.Presentation
         }
 
         public OneBitWorldSession Session => session;
+
+        private void Awake()
+        {
+            signalProperties = new MaterialPropertyBlock();
+        }
 
         public void Attach(OneBitWorldSession activeSession)
         {

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
-using SiliconSandbox.Bootstrap;
 using SiliconSandbox.Contracts;
 using SiliconSandbox.Presentation;
 using SiliconSandbox.Persistence;
@@ -274,7 +273,7 @@ namespace SiliconSandbox.Interaction
                 {
                     var start = wireStart.Value;
                     if (hovered == null && hasHit &&
-                        hit.collider.GetComponent<PlayableWorldBootstrap>() != null)
+                        hit.collider.GetComponent<GeneratedFloorSurface>() != null)
                     {
                         PlacementCell(out var targetCell);
                         TryEdit(() => session.PlaceWireStub(start, targetCell));
@@ -361,7 +360,7 @@ namespace SiliconSandbox.Interaction
                     session.Design, start, target);
             }
             else if (hovered == null &&
-                     hit.collider.GetComponent<PlayableWorldBootstrap>() != null)
+                     hit.collider.GetComponent<GeneratedFloorSurface>() != null)
             {
                 PlacementCell(out var cell);
                 key = "cell:" + cell.X + ":" + cell.Y + ":" + cell.Z;

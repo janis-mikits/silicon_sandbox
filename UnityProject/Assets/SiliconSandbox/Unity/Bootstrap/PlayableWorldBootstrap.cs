@@ -92,8 +92,8 @@ namespace SiliconSandbox.Bootstrap
             Inventory = Context.Inventory;
             BuildGeneratedWorld(Session.Design.Bounds);
             controller.SetWorldBounds(Session.Design.Bounds);
-            playerTransform.position = new Vector3((float)saved.Player.X,
-                (float)saved.Player.Y, (float)saved.Player.Z);
+            controller.Teleport(new Vector3((float)saved.Player.X,
+                (float)saved.Player.Y, (float)saved.Player.Z));
             controller.SetViewDirection(new Vector3(
                 (float)saved.Player.LookX, (float)saved.Player.LookY,
                 (float)saved.Player.LookZ).normalized);
@@ -103,6 +103,8 @@ namespace SiliconSandbox.Bootstrap
 
         private void BuildGeneratedWorld(WorldBounds bounds)
         {
+            if (GetComponent<GeneratedFloorSurface>() == null)
+                gameObject.AddComponent<GeneratedFloorSurface>();
             if (wallsRoot != null)
             {
                 wallsRoot.SetActive(false);
