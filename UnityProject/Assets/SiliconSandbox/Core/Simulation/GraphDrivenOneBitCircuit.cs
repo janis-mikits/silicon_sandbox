@@ -12,41 +12,41 @@ namespace SiliconSandbox.Simulation
 
         private OneBitCircuitPlan plan;
         private OneBitNet[] nets;
-        private Dictionary<Guid, ConstantLogicSource> sources;
-        private Dictionary<Guid, OneBitSrFlipFlop> storage;
+        private Dictionary<RuntimeObjectKey, ConstantLogicSource> sources;
+        private Dictionary<RuntimeObjectKey, OneBitSrFlipFlop> storage;
         private List<int>[] gatesByInput;
         private Queue<(WorkKind kind, int index)> pending;
         private bool initializing;
-        private HashSet<Guid> newStorageIds;
+        private HashSet<RuntimeObjectKey> newStorageIds;
         private LogicBit worldClockLevel;
 
         public GraphDrivenOneBitCircuit(OneBitCircuitPlan initialPlan)
             : this(initialPlan, null, null, LogicBit.Zero, false) { }
 
         private GraphDrivenOneBitCircuit(OneBitCircuitPlan next,
-            Dictionary<Guid, ConstantLogicSource> oldSources,
-            Dictionary<Guid, OneBitSrFlipFlop> oldStorage,
+            Dictionary<RuntimeObjectKey, ConstantLogicSource> oldSources,
+            Dictionary<RuntimeObjectKey, OneBitSrFlipFlop> oldStorage,
             LogicBit previousWorldClockLevel, bool reset)
         {
             if (next == null) throw new ArgumentNullException(nameof(next));
             plan = next;
             initializing = oldStorage == null || reset;
             worldClockLevel = reset ? LogicBit.Zero : previousWorldClockLevel;
-            sources = new Dictionary<Guid, ConstantLogicSource>();
+            sources = new Dictionary<RuntimeObjectKey, ConstantLogicSource>();
             foreach (var binding in next.Sources)
-                sources.Add(binding.ObjectId, oldSources != null &&
-                    oldSources.TryGetValue(binding.ObjectId, out var existing)
+                sources.Add(binding.RuntimeKey, oldSources != null &&
+                    oldSources.TryGetValue(binding.RuntimeKey, out var existing)
                     ? reset ? new ConstantLogicSource(existing.ConfiguredOnValue,
                         existing.InitialOn) : existing
                     : new ConstantLogicSource());
-            storage = new Dictionary<Guid, OneBitSrFlipFlop>();
-            newStorageIds = new HashSet<Guid>();
+            storage = new Dictionary<RuntimeObjectKey, OneBitSrFlipFlop>();
+            newStorageIds = new HashSet<RuntimeObjectKey>();
             foreach (var binding in next.SrFlipFlops)
             {
-                if (oldStorage == null || reset || !oldStorage.ContainsKey(binding.ObjectId))
-                    newStorageIds.Add(binding.ObjectId);
-                storage.Add(binding.ObjectId, oldStorage != null &&
-                    oldStorage.TryGetValue(binding.ObjectId, out var prior)
+                if (oldStorage == null || reset || !oldStorage.ContainsKey(binding.RuntimeKey))
+                    newStorageIds.Add(binding.RuntimeKey);
+                storage.Add(binding.RuntimeKey, oldStorage != null &&
+                    oldStorage.TryGetValue(binding.RuntimeKey, out var prior)
                     ? reset ? new OneBitSrFlipFlop(binding.InitialQ) :
                         prior.CopyWithInitialQ(binding.InitialQ)
                     : new OneBitSrFlipFlop(binding.InitialQ));
@@ -71,8 +71,12 @@ namespace SiliconSandbox.Simulation
         }
 
         public ResolvedBit Net(int index) => nets[index].Resolution;
-        public ConstantLogicSource Source(Guid objectId) => sources[objectId];
-        public OneBitSrFlipFlop Storage(Guid objectId) => storage[objectId];
+        public ConstantLogicSource Source(Guid objectId) =>
+            Source(RuntimeObjectKey.World(objectId));
+        public ConstantLogicSource Source(RuntimeObjectKey key) => sources[key];
+        public OneBitSrFlipFlop Storage(Guid objectId) =>
+            Storage(RuntimeObjectKey.World(objectId));
+        public OneBitSrFlipFlop Storage(RuntimeObjectKey key) => storage[key];
         public LogicBit WorldClockLevel => worldClockLevel;
 
         public void SetWorldClockLevel(LogicBit level)
@@ -84,15 +88,21 @@ namespace SiliconSandbox.Simulation
         }
 
         public void SetSourceOn(Guid objectId, bool on)
+            => SetSourceOn(RuntimeObjectKey.World(objectId), on);
+
+        public void SetSourceOn(RuntimeObjectKey key, bool on)
         {
-            Source(objectId).SetOn(on);
-            EnqueueSource(objectId);
+            Source(key).SetOn(on);
+            EnqueueSource(key);
         }
 
         public void ConfigureSource(Guid objectId, LogicBit onValue, bool initialOn)
+            => ConfigureSource(RuntimeObjectKey.World(objectId), onValue, initialOn);
+
+        public void ConfigureSource(RuntimeObjectKey key, LogicBit onValue, bool initialOn)
         {
-            Source(objectId).Configure(onValue, initialOn);
-            EnqueueSource(objectId);
+            Source(key).Configure(onValue, initialOn);
+            EnqueueSource(key);
         }
 
         public void ResetSources()
@@ -150,12 +160,14 @@ namespace SiliconSandbox.Simulation
                     {
                         case WorkKind.Source:
                             var source = plan.Sources[work.index];
-                            Drive(source.OutputNet, source.ObjectId,
-                                sources[source.ObjectId].Drive);
+                            Drive(source.OutputNet,
+                                new RuntimeDriverKey(source.RuntimeKey, Guid.Empty),
+                                sources[source.RuntimeKey].Drive);
                             break;
                         case WorkKind.And:
                             var gate = plan.AndGates[work.index];
-                            Drive(gate.OutputY, gate.ObjectId,
+                            Drive(gate.OutputY,
+                                new RuntimeDriverKey(gate.RuntimeKey, Guid.Empty),
                                 OneBitLogic.And(nets[gate.InputA].Resolution.Value,
                                     nets[gate.InputB].Resolution.Value));
                             break;
@@ -164,7 +176,9 @@ namespace SiliconSandbox.Simulation
                             break;
                         case WorkKind.WorldClock:
                             var clock = plan.WorldClock.Value;
-                            Drive(clock.OutputNet, clock.ConnectorId, worldClockLevel);
+                            Drive(clock.OutputNet, new RuntimeDriverKey(
+                                RuntimeObjectKey.World(clock.ConnectorId), Guid.Empty),
+                                worldClockLevel);
                             break;
                     }
                 }
@@ -173,7 +187,7 @@ namespace SiliconSandbox.Simulation
                     for (var i = 0; i < plan.SrFlipFlops.Count; i++)
                     {
                         var binding = plan.SrFlipFlops[i];
-                        storage[binding.ObjectId].InitializeClockBaseline(
+                        storage[binding.RuntimeKey].InitializeClockBaseline(
                             nets[binding.Clock].Resolution.Value);
                     }
                     initializing = false;
@@ -183,8 +197,8 @@ namespace SiliconSandbox.Simulation
                 if (newStorageIds.Count > 0)
                 {
                     foreach (var binding in plan.SrFlipFlops)
-                        if (newStorageIds.Contains(binding.ObjectId))
-                            storage[binding.ObjectId].InitializeClockBaseline(
+                        if (newStorageIds.Contains(binding.RuntimeKey))
+                            storage[binding.RuntimeKey].InitializeClockBaseline(
                                 nets[binding.Clock].Resolution.Value);
                     newStorageIds.Clear();
                 }
@@ -195,7 +209,7 @@ namespace SiliconSandbox.Simulation
                 {
                     var binding = plan.SrFlipFlops[i];
                     clockValues[i] = nets[binding.Clock].Resolution.Value;
-                    var flipFlop = storage[binding.ObjectId];
+                    var flipFlop = storage[binding.RuntimeKey];
                     flipFlop.PreviewClock(clockValues[i],
                         nets[binding.S].Resolution.Value,
                         nets[binding.R].Resolution.Value, out nextQ[i]);
@@ -203,7 +217,7 @@ namespace SiliconSandbox.Simulation
                 }
                 // Every preview reads the same pre-update net and storage state.
                 for (var i = 0; i < plan.SrFlipFlops.Count; i++)
-                    storage[plan.SrFlipFlops[i].ObjectId].CommitClock(clockValues[i], nextQ[i]);
+                    storage[plan.SrFlipFlops[i].RuntimeKey].CommitClock(clockValues[i], nextQ[i]);
                 if (!changed) return;
                 for (var i = 0; i < plan.SrFlipFlops.Count; i++)
                     DriveStorageOutput(i);
@@ -211,15 +225,15 @@ namespace SiliconSandbox.Simulation
             throw new InvalidOperationException("Feedback exceeded the delta-pass limit.");
         }
 
-        private void EnqueueSource(Guid objectId)
+        private void EnqueueSource(RuntimeObjectKey key)
         {
             for (var i = 0; i < plan.Sources.Count; i++)
-                if (plan.Sources[i].ObjectId == objectId)
+                if (plan.Sources[i].RuntimeKey.Equals(key))
                 { pending.Enqueue((WorkKind.Source, i)); return; }
             throw new KeyNotFoundException("Source is not in the execution plan.");
         }
 
-        private void Drive(int netIndex, Guid driverId, LogicBit value)
+        private void Drive(int netIndex, RuntimeDriverKey driverId, LogicBit value)
         {
             var net = nets[netIndex];
             var before = net.Resolution;
@@ -232,9 +246,11 @@ namespace SiliconSandbox.Simulation
         private void DriveStorageOutput(int index)
         {
             var binding = plan.SrFlipFlops[index];
-            var flipFlop = storage[binding.ObjectId];
-            Drive(binding.Q, binding.QDriverId, flipFlop.Q);
-            Drive(binding.QBar, binding.QBarDriverId, flipFlop.QBar);
+            var flipFlop = storage[binding.RuntimeKey];
+            Drive(binding.Q, new RuntimeDriverKey(binding.RuntimeKey,
+                binding.QDriverId), flipFlop.Q);
+            Drive(binding.QBar, new RuntimeDriverKey(binding.RuntimeKey,
+                binding.QBarDriverId), flipFlop.QBar);
         }
     }
 }

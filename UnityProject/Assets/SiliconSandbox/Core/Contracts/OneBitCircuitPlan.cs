@@ -7,25 +7,32 @@ namespace SiliconSandbox.Contracts
     // authored object and pin identities remain in the design, not this execution cache.
     public readonly struct SourceBinding
     {
-        public Guid ObjectId { get; }
+        public RuntimeObjectKey RuntimeKey { get; }
+        public Guid ObjectId => RuntimeKey.LocalObjectId;
         public int OutputNet { get; }
         public SourceBinding(Guid objectId, int outputNet)
-        { ObjectId = objectId; OutputNet = outputNet; }
+            : this(RuntimeObjectKey.World(objectId), outputNet) { }
+        public SourceBinding(RuntimeObjectKey runtimeKey, int outputNet)
+        { RuntimeKey = runtimeKey; OutputNet = outputNet; }
     }
 
     public readonly struct AndBinding
     {
-        public Guid ObjectId { get; }
+        public RuntimeObjectKey RuntimeKey { get; }
+        public Guid ObjectId => RuntimeKey.LocalObjectId;
         public int InputA { get; }
         public int InputB { get; }
         public int OutputY { get; }
         public AndBinding(Guid objectId, int inputA, int inputB, int outputY)
-        { ObjectId = objectId; InputA = inputA; InputB = inputB; OutputY = outputY; }
+            : this(RuntimeObjectKey.World(objectId), inputA, inputB, outputY) { }
+        public AndBinding(RuntimeObjectKey runtimeKey, int inputA, int inputB, int outputY)
+        { RuntimeKey = runtimeKey; InputA = inputA; InputB = inputB; OutputY = outputY; }
     }
 
     public readonly struct SrBinding
     {
-        public Guid ObjectId { get; }
+        public RuntimeObjectKey RuntimeKey { get; }
+        public Guid ObjectId => RuntimeKey.LocalObjectId;
         public int S { get; }
         public int R { get; }
         public int Clock { get; }
@@ -37,8 +44,14 @@ namespace SiliconSandbox.Contracts
 
         public SrBinding(Guid objectId, int s, int r, int clock, int q, int qBar,
             Guid qDriverId, Guid qBarDriverId, LogicBit? initialQ = null)
+            : this(RuntimeObjectKey.World(objectId), s, r, clock, q, qBar,
+                qDriverId, qBarDriverId, initialQ) { }
+
+        public SrBinding(RuntimeObjectKey runtimeKey, int s, int r, int clock,
+            int q, int qBar, Guid qDriverId, Guid qBarDriverId,
+            LogicBit? initialQ = null)
         {
-            ObjectId = objectId;
+            RuntimeKey = runtimeKey;
             S = s; R = r; Clock = clock; Q = q; QBar = qBar;
             QDriverId = qDriverId; QBarDriverId = qBarDriverId;
             InitialQ = initialQ;
@@ -73,30 +86,32 @@ namespace SiliconSandbox.Contracts
             var gateList = new List<AndBinding>(andGates);
             var srList = srFlipFlops == null ? new List<SrBinding>() :
                 new List<SrBinding>(srFlipFlops);
-            var ids = new HashSet<Guid>();
-            var outputDriverIds = new HashSet<Guid>();
+            var ids = new HashSet<RuntimeObjectKey>();
+            var outputDriverIds = new HashSet<RuntimeDriverKey>();
             foreach (var source in sourceList)
             {
-                if (source.ObjectId == Guid.Empty || !ids.Add(source.ObjectId))
+                if (source.ObjectId == Guid.Empty || !ids.Add(source.RuntimeKey))
                     throw new ArgumentException("Duplicate or empty component identity.");
                 CheckNet(source.OutputNet);
-                outputDriverIds.Add(source.ObjectId);
+                outputDriverIds.Add(new RuntimeDriverKey(source.RuntimeKey, Guid.Empty));
             }
             foreach (var gate in gateList)
             {
-                if (gate.ObjectId == Guid.Empty || !ids.Add(gate.ObjectId))
+                if (gate.ObjectId == Guid.Empty || !ids.Add(gate.RuntimeKey))
                     throw new ArgumentException("Duplicate or empty component identity.");
                 CheckNet(gate.InputA);
                 CheckNet(gate.InputB);
                 CheckNet(gate.OutputY);
-                outputDriverIds.Add(gate.ObjectId);
+                outputDriverIds.Add(new RuntimeDriverKey(gate.RuntimeKey, Guid.Empty));
             }
             foreach (var storage in srList)
             {
-                if (storage.ObjectId == Guid.Empty || !ids.Add(storage.ObjectId) ||
+                if (storage.ObjectId == Guid.Empty || !ids.Add(storage.RuntimeKey) ||
                     storage.QDriverId == Guid.Empty || storage.QBarDriverId == Guid.Empty ||
-                    !outputDriverIds.Add(storage.QDriverId) ||
-                    !outputDriverIds.Add(storage.QBarDriverId) ||
+                    !outputDriverIds.Add(new RuntimeDriverKey(storage.RuntimeKey,
+                        storage.QDriverId)) ||
+                    !outputDriverIds.Add(new RuntimeDriverKey(storage.RuntimeKey,
+                        storage.QBarDriverId)) ||
                     storage.InitialQ.HasValue && storage.InitialQ.Value > LogicBit.Z)
                     throw new ArgumentException("Invalid SR identity or initialization.");
                 CheckNet(storage.S); CheckNet(storage.R); CheckNet(storage.Clock);
@@ -106,7 +121,8 @@ namespace SiliconSandbox.Contracts
             {
                 var clock = worldClock.Value;
                 if (clock.ConnectorId == Guid.Empty || clock.AnchorNodeId == Guid.Empty ||
-                    !outputDriverIds.Add(clock.ConnectorId))
+                    !outputDriverIds.Add(new RuntimeDriverKey(
+                        RuntimeObjectKey.World(clock.ConnectorId), Guid.Empty)))
                     throw new ArgumentException("Invalid world-clock driver identity.");
                 CheckNet(clock.OutputNet);
             }

@@ -21,9 +21,9 @@ namespace SiliconSandbox.Simulation
 
         private readonly struct SourceChange
         {
-            public Guid ObjectId { get; }
+            public RuntimeObjectKey Key { get; }
             public bool On { get; }
-            public SourceChange(Guid objectId, bool on) { ObjectId = objectId; On = on; }
+            public SourceChange(RuntimeObjectKey key, bool on) { Key = key; On = on; }
         }
 
         public SimulationTime Now { get; private set; } = SimulationTime.Zero;
@@ -46,13 +46,16 @@ namespace SiliconSandbox.Simulation
         }
 
         public void QueueSourceChange(Guid objectId, bool on, SimulationTime when)
+            => QueueSourceChange(RuntimeObjectKey.World(objectId), on, when);
+
+        public void QueueSourceChange(RuntimeObjectKey key, bool on, SimulationTime when)
         {
             if (when.CompareTo(Now) < 0)
                 throw new ArgumentOutOfRangeException(nameof(when));
-            circuit.Source(objectId); // reject an unknown source before queuing it
+            circuit.Source(key); // reject an unknown source before queuing it
             if (!sourceChanges.TryGetValue(when, out var group))
                 sourceChanges.Add(when, group = new List<SourceChange>());
-            group.Add(new SourceChange(objectId, on));
+            group.Add(new SourceChange(key, on));
         }
 
         public void StartClock()
@@ -120,7 +123,7 @@ namespace SiliconSandbox.Simulation
                 if (sourceChanges.TryGetValue(slot, out var changes))
                 {
                     foreach (var change in changes)
-                        circuit.SetSourceOn(change.ObjectId, change.On);
+                        circuit.SetSourceOn(change.Key, change.On);
                     sourceChanges.Remove(slot);
                 }
                 var clockEdge = ClockRunning && nextEdgeTime.HasValue &&
