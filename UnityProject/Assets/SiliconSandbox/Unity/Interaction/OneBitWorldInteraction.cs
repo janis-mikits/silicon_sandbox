@@ -863,9 +863,53 @@ namespace SiliconSandbox.Interaction
                 else return;
             }
             catch (KeyNotFoundException) { return; }
+            DrawHoverOutline(hovered);
             GUI.Box(new Rect(12f, 94f, 360f, 48f),
                 "1-bit  " + detail.Value.ToSymbol() + "  tag " + detail.Tag +
                 "  connections " + detail.ConnectedPins.Count);
+        }
+
+        private void DrawHoverOutline(WorldSelectablePart part)
+        {
+            if (viewCamera == null) return;
+            var renderer = part.GetComponent<Renderer>();
+            if (renderer == null || !renderer.isVisible) return;
+            var bounds = renderer.bounds;
+            var minimumX = float.PositiveInfinity;
+            var minimumY = float.PositiveInfinity;
+            var maximumX = float.NegativeInfinity;
+            var maximumY = float.NegativeInfinity;
+            for (var x = -1; x <= 1; x += 2)
+                for (var y = -1; y <= 1; y += 2)
+                    for (var z = -1; z <= 1; z += 2)
+                    {
+                        var corner = bounds.center + Vector3.Scale(bounds.extents,
+                            new Vector3(x, y, z));
+                        var projected = viewCamera.WorldToScreenPoint(corner);
+                        if (projected.z <= 0f) return;
+                        minimumX = Mathf.Min(minimumX, projected.x);
+                        maximumX = Mathf.Max(maximumX, projected.x);
+                        var guiY = Screen.height - projected.y;
+                        minimumY = Mathf.Min(minimumY, guiY);
+                        maximumY = Mathf.Max(maximumY, guiY);
+                    }
+            var centerX = (minimumX + maximumX) * 0.5f;
+            var centerY = (minimumY + maximumY) * 0.5f;
+            var halfWidth = Mathf.Max(9f, (maximumX - minimumX) * 0.5f + 3f);
+            var halfHeight = Mathf.Max(9f, (maximumY - minimumY) * 0.5f + 3f);
+            var rect = new Rect(centerX - halfWidth, centerY - halfHeight,
+                halfWidth * 2f, halfHeight * 2f);
+            var previous = GUI.color;
+            GUI.color = new Color(1f, 0.95f, 0.15f, 0.95f);
+            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 2f),
+                Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.x, rect.yMax - 2f,
+                rect.width, 2f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.x, rect.y, 2f, rect.height),
+                Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.xMax - 2f, rect.y,
+                2f, rect.height), Texture2D.whiteTexture);
+            GUI.color = previous;
         }
 
         private void DrawInventory()
