@@ -21,6 +21,8 @@ namespace SiliconSandbox.Presentation
         private Renderer partRenderer;
         private float invalidUntil;
         private bool wasInvalid;
+        private bool hasSignalColor;
+        private Color signalColor;
 
         public WorldPartKind Kind { get; private set; }
         public Guid OwnerId { get; private set; }
@@ -36,6 +38,22 @@ namespace SiliconSandbox.Presentation
 
         public void FlashInvalid() => invalidUntil = Time.unscaledTime + 0.18f;
 
+        public void SetSignalColor(Color color)
+        {
+            signalColor = color;
+            hasSignalColor = true;
+            if (Time.unscaledTime >= invalidUntil)
+                ApplySignalColor();
+        }
+
+        private void ApplySignalColor()
+        {
+            feedback.Clear();
+            feedback.SetColor("_Color", signalColor);
+            feedback.SetColor("_BaseColor", signalColor);
+            partRenderer.SetPropertyBlock(feedback);
+        }
+
         private void LateUpdate()
         {
             if (partRenderer == null) return;
@@ -49,7 +67,8 @@ namespace SiliconSandbox.Presentation
             }
             else if (wasInvalid)
             {
-                partRenderer.SetPropertyBlock(null);
+                if (hasSignalColor) ApplySignalColor();
+                else partRenderer.SetPropertyBlock(null);
                 wasInvalid = false;
             }
         }

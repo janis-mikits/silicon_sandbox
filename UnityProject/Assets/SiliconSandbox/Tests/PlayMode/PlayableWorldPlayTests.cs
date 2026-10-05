@@ -15,6 +15,36 @@ namespace SiliconSandbox.Tests.PlayMode
     public sealed class PlayableWorldPlayTests
     {
         [UnityTest]
+        public IEnumerator InvalidFlashRestoresLatestSettledSignalColor()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var session = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>().Session;
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(6, 1, 6), GridOrientation.Default);
+            var source = session.Design.Components[0];
+            WorldSelectablePart pin = null;
+            yield return null;
+            foreach (var part in UnityEngine.Object.FindObjectsByType<
+                WorldSelectablePart>(FindObjectsSortMode.None))
+                if (part.Kind == WorldPartKind.ComponentPin &&
+                    part.OwnerId == source.Id)
+                    pin = part;
+            Assert.That(pin, Is.Not.Null);
+            pin.FlashInvalid();
+            session.ToggleSource(source.Id);
+            yield return new WaitForSecondsRealtime(0.25f);
+            yield return null;
+            var properties = new MaterialPropertyBlock();
+            pin.GetComponent<Renderer>().GetPropertyBlock(properties);
+            var shown = properties.GetColor("_Color");
+            Assert.That(shown.g, Is.GreaterThan(0.8f),
+                "The settled 1 color must return after red invalid feedback.");
+            Assert.That(shown.r, Is.LessThan(0.3f));
+        }
+
+        [UnityTest]
         public IEnumerator LocalEditKeepsUnchangedGraphicsAndTargets()
         {
             SceneManager.LoadScene("PlayableWorld");

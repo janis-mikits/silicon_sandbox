@@ -473,6 +473,12 @@ namespace SiliconSandbox.Presentation
 
         private void SetSignalColor(Renderer renderer, Color color)
         {
+            var selectable = renderer.GetComponent<WorldSelectablePart>();
+            if (selectable != null)
+            {
+                selectable.SetSignalColor(color);
+                return;
+            }
             signalProperties.Clear();
             signalProperties.SetColor("_Color", color);
             signalProperties.SetColor("_BaseColor", color);
