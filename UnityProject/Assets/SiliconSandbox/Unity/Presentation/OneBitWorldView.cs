@@ -18,6 +18,10 @@ namespace SiliconSandbox.Presentation
             new Dictionary<Guid, JoinMember>();
         private readonly Dictionary<JoinMember, Renderer> pinRenderers =
             new Dictionary<JoinMember, Renderer>();
+        private readonly Dictionary<int, List<Renderer>> signalRenderersByNet =
+            new Dictionary<int, List<Renderer>>();
+        private readonly Dictionary<int, LogicBit> shownSignalValues =
+            new Dictionary<int, LogicBit>();
         private readonly MaterialPropertyBlock signalProperties =
             new MaterialPropertyBlock();
         private Transform generatedRoot;
@@ -63,7 +67,30 @@ namespace SiliconSandbox.Presentation
             foreach (var route in session.Design.Topology.Connectors)
                 DrawRoute(route);
             DrawJunctions();
+            BuildSignalGroups();
             shownRevision = session.Revision;
+        }
+
+        private void BuildSignalGroups()
+        {
+            signalRenderersByNet.Clear();
+            shownSignalValues.Clear();
+            foreach (var pair in routeBodies)
+            {
+                var net = session.Built.NetIndex(routeFirstMembers[pair.Key]);
+                if (!signalRenderersByNet.TryGetValue(net, out var group))
+                    signalRenderersByNet.Add(net,
+                        group = new List<Renderer>());
+                group.AddRange(pair.Value);
+            }
+            foreach (var pair in pinRenderers)
+            {
+                var net = session.Built.NetIndex(pair.Key);
+                if (!signalRenderersByNet.TryGetValue(net, out var group))
+                    signalRenderersByNet.Add(net,
+                        group = new List<Renderer>());
+                group.Add(pair.Value);
+            }
         }
 
         private void DrawComponent(PlacedOneBitComponent component)
@@ -271,17 +298,18 @@ namespace SiliconSandbox.Presentation
 
         private void RefreshSignals()
         {
-            foreach (var pair in routeBodies)
+            foreach (var pair in signalRenderersByNet)
             {
-                var value = session.Circuit.Net(
-                    session.Built.NetIndex(routeFirstMembers[pair.Key])).Value;
+                var value = session.Circuit.Net(pair.Key).Value;
+                if (value != LogicBit.X &&
+                    shownSignalValues.TryGetValue(pair.Key, out var shown) &&
+                    shown == value)
+                    continue;
+                shownSignalValues[pair.Key] = value;
                 var color = SignalColor(value);
-                foreach (var renderer in pair.Value) SetSignalColor(renderer, color);
-            }
-            foreach (var pair in pinRenderers)
-            {
-                var value = session.Circuit.Net(session.Built.NetIndex(pair.Key)).Value;
-                SetSignalColor(pair.Value, SignalColor(value));
+                foreach (var renderer in pair.Value)
+                    if (value != LogicBit.X || renderer.isVisible)
+                        SetSignalColor(renderer, color);
             }
         }
 
