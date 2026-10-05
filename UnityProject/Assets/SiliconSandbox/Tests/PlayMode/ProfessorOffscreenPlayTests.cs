@@ -140,11 +140,19 @@ namespace SiliconSandbox.Tests.PlayMode
                 Is.LessThan(0f));
             Assert.That(session.Scheduler.Diagnostic, Is.Null);
             session.Scheduler.ResumeSimulation();
+            var beforeOffscreenEdges = session.Scheduler.ClockEdgesProcessed;
             session.Scheduler.StartClock();
-            session.Scheduler.AdvanceUntil(
-                session.Scheduler.NextClockEdge.Value); // falling
-            session.Scheduler.AdvanceUntil(
-                session.Scheduler.NextClockEdge.Value); // third rise
+            var offscreenDeadline = Time.realtimeSinceStartup + 3f;
+            while (session.Scheduler.ClockEdgesProcessed <
+                   beforeOffscreenEdges + 2 &&
+                   Time.realtimeSinceStartup < offscreenDeadline)
+                yield return null;
+            Assert.That(session.Scheduler.ClockEdgesProcessed,
+                Is.GreaterThanOrEqualTo(beforeOffscreenEdges + 2),
+                "The live scene must advance the stopped-low clock through" +
+                " a falling edge and next rise while both instances are" +
+                " outside the camera view.");
+            session.Scheduler.StopClock();
             AssertQ(session, a, b, qPort, LogicBit.Zero, LogicBit.Zero);
             var internalSr = version.Components[0];
             Assert.That(session.Inspector.InspectInternalPin(a.InstanceId,
