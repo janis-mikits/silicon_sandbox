@@ -18,6 +18,22 @@ namespace SiliconSandbox.Presentation
             new Dictionary<Guid, JoinMember>();
         private readonly Dictionary<JoinMember, Renderer> pinRenderers =
             new Dictionary<JoinMember, Renderer>();
+        private readonly Dictionary<Guid, PlacedOneBitComponent> drawnComponents =
+            new Dictionary<Guid, PlacedOneBitComponent>();
+        private readonly Dictionary<Guid, PlacedOneBitModuleInstance> drawnModules =
+            new Dictionary<Guid, PlacedOneBitModuleInstance>();
+        private readonly Dictionary<Guid, bool> drawnModuleAvailability =
+            new Dictionary<Guid, bool>();
+        private readonly Dictionary<Guid, ConnectorRoute> drawnRoutes =
+            new Dictionary<Guid, ConnectorRoute>();
+        private readonly Dictionary<Guid, GameObject> componentRoots =
+            new Dictionary<Guid, GameObject>();
+        private readonly Dictionary<Guid, GameObject> moduleRoots =
+            new Dictionary<Guid, GameObject>();
+        private readonly Dictionary<Guid, GameObject> routeRoots =
+            new Dictionary<Guid, GameObject>();
+        private readonly Dictionary<JoinMember, JunctionGraphic> junctions =
+            new Dictionary<JoinMember, JunctionGraphic>();
         private readonly Dictionary<int, List<Renderer>> signalRenderersByNet =
             new Dictionary<int, List<Renderer>>();
         private readonly Dictionary<int, LogicBit> shownSignalValues =
@@ -28,11 +44,31 @@ namespace SiliconSandbox.Presentation
         private ulong shownRevision = ulong.MaxValue;
         private OneBitWorldSession session;
 
+        private sealed class JunctionGraphic
+        {
+            public OneBitVisibleJunction Model;
+            public GameObject Object;
+            public Renderer Renderer;
+        }
+
         public OneBitWorldSession Session => session;
 
         public void Attach(OneBitWorldSession activeSession)
         {
             session = activeSession ?? throw new ArgumentNullException(nameof(activeSession));
+            if (generatedRoot != null) Retire(generatedRoot.gameObject);
+            generatedRoot = null;
+            drawnComponents.Clear();
+            drawnModules.Clear();
+            drawnModuleAvailability.Clear();
+            drawnRoutes.Clear();
+            componentRoots.Clear();
+            moduleRoots.Clear();
+            routeRoots.Clear();
+            junctions.Clear();
+            routeBodies.Clear();
+            routeFirstMembers.Clear();
+            pinRenderers.Clear();
             shownRevision = ulong.MaxValue;
             RebuildIfNeeded();
             RefreshSignals();
@@ -48,27 +84,163 @@ namespace SiliconSandbox.Presentation
         private void RebuildIfNeeded()
         {
             if (shownRevision == session.Revision) return;
-            if (generatedRoot != null)
+            if (generatedRoot == null)
             {
-                generatedRoot.gameObject.SetActive(false);
-                Destroy(generatedRoot.gameObject);
+                var root = new GameObject("Authored world graphics");
+                root.transform.SetParent(transform, false);
+                generatedRoot = root.transform;
             }
-            var root = new GameObject("Authored world revision " + session.Revision);
-            root.transform.SetParent(transform, false);
-            generatedRoot = root.transform;
-            routeBodies.Clear();
-            routeFirstMembers.Clear();
-            pinRenderers.Clear();
-
-            foreach (var component in session.Design.Components)
-                DrawComponent(component);
-            foreach (var module in session.Design.Modules)
-                DrawModule(module);
-            foreach (var route in session.Design.Topology.Connectors)
-                DrawRoute(route);
-            DrawJunctions();
+            ReconcileComponents();
+            ReconcileModules();
+            ReconcileRoutes();
+            ReconcileJunctions();
             BuildSignalGroups();
             shownRevision = session.Revision;
+        }
+
+        private void ReconcileComponents()
+        {
+            var next = new Dictionary<Guid, PlacedOneBitComponent>();
+            foreach (var item in session.Design.Components) next.Add(item.Id, item);
+            foreach (var pair in drawnComponents)
+                if (!next.TryGetValue(pair.Key, out var current) ||
+                    !ReferenceEquals(pair.Value, current))
+                {
+                    foreach (var pin in pair.Value.BuildPins())
+                        pinRenderers.Remove(JoinMember.ComponentPin(
+                            pair.Key, pin.PinId));
+                    Retire(componentRoots[pair.Key]);
+                    componentRoots.Remove(pair.Key);
+                }
+            foreach (var pair in next)
+                if (!drawnComponents.TryGetValue(pair.Key, out var old) ||
+                    !ReferenceEquals(old, pair.Value))
+                {
+                    var root = new GameObject("Component graphics " +
+                        pair.Key.ToString("D"));
+                    root.transform.SetParent(generatedRoot, false);
+                    componentRoots.Add(pair.Key, root);
+                    DrawComponent(pair.Value, root.transform);
+                }
+            drawnComponents.Clear();
+            foreach (var pair in next) drawnComponents.Add(pair.Key, pair.Value);
+        }
+
+        private void ReconcileModules()
+        {
+            var next = new Dictionary<Guid, PlacedOneBitModuleInstance>();
+            foreach (var item in session.Design.Modules) next.Add(item.Id, item);
+            foreach (var pair in drawnModules)
+                if (!next.TryGetValue(pair.Key, out var current) ||
+                    !ReferenceEquals(pair.Value, current) ||
+                    drawnModuleAvailability[pair.Key] !=
+                        session.HasModuleVersion(pair.Value.VersionId))
+                {
+                    foreach (var port in pair.Value.BuildPortBits())
+                        pinRenderers.Remove(JoinMember.ModulePortBit(
+                            pair.Key, port.PortId, port.BitIndex));
+                    Retire(moduleRoots[pair.Key]);
+                    moduleRoots.Remove(pair.Key);
+                }
+            foreach (var pair in next)
+                if (!drawnModules.TryGetValue(pair.Key, out var old) ||
+                    !ReferenceEquals(old, pair.Value) ||
+                    !moduleRoots.ContainsKey(pair.Key))
+                {
+                    var root = new GameObject("Module graphics " +
+                        pair.Key.ToString("D"));
+                    root.transform.SetParent(generatedRoot, false);
+                    moduleRoots.Add(pair.Key, root);
+                    DrawModule(pair.Value, root.transform);
+                }
+            drawnModules.Clear();
+            drawnModuleAvailability.Clear();
+            foreach (var pair in next)
+            {
+                drawnModules.Add(pair.Key, pair.Value);
+                drawnModuleAvailability.Add(pair.Key,
+                    session.HasModuleVersion(pair.Value.VersionId));
+            }
+        }
+
+        private void ReconcileRoutes()
+        {
+            var next = new Dictionary<Guid, ConnectorRoute>();
+            foreach (var item in session.Design.Topology.Connectors)
+                next.Add(item.Id, item);
+            foreach (var pair in drawnRoutes)
+                if (!next.TryGetValue(pair.Key, out var current) ||
+                    !ReferenceEquals(pair.Value, current))
+                {
+                    Retire(routeRoots[pair.Key]);
+                    routeRoots.Remove(pair.Key);
+                    routeBodies.Remove(pair.Key);
+                    routeFirstMembers.Remove(pair.Key);
+                }
+            foreach (var pair in next)
+                if (!drawnRoutes.TryGetValue(pair.Key, out var old) ||
+                    !ReferenceEquals(old, pair.Value))
+                    DrawRoute(pair.Value);
+            drawnRoutes.Clear();
+            foreach (var pair in next) drawnRoutes.Add(pair.Key, pair.Value);
+        }
+
+        private void ReconcileJunctions()
+        {
+            var next = new Dictionary<JoinMember, OneBitVisibleJunction>();
+            foreach (var item in OneBitVisualTopology.Junctions(
+                session.Design.Topology))
+                next.Add(JoinMember.ConnectorNode(item.ConnectorId,
+                    item.NodeId), item);
+            var remove = new List<JoinMember>();
+            foreach (var pair in junctions)
+                if (!next.TryGetValue(pair.Key, out var current) ||
+                    !SameJunction(pair.Value.Model, current))
+                {
+                    if (routeBodies.TryGetValue(pair.Value.Model.ConnectorId,
+                            out var bodies))
+                        bodies.Remove(pair.Value.Renderer);
+                    Retire(pair.Value.Object);
+                    remove.Add(pair.Key);
+                }
+            foreach (var key in remove) junctions.Remove(key);
+            foreach (var pair in next)
+                if (!junctions.ContainsKey(pair.Key))
+                {
+                    var item = pair.Value;
+                    var marker = Primitive("Junction " + item.NodeId.ToString("D"),
+                        PrimitiveType.Sphere, generatedRoot);
+                    marker.transform.position = RoutePosition(item.Cell,
+                        item.PointQ, item.Channel);
+                    marker.transform.localScale = Vector3.one * 0.34f;
+                    marker.AddComponent<WorldSelectablePart>().Initialize(
+                        WorldPartKind.ConnectorNode, item.ConnectorId,
+                        item.NodeId);
+                    var renderer = marker.GetComponent<Renderer>();
+                    routeBodies[item.ConnectorId].Add(renderer);
+                    junctions.Add(pair.Key, new JunctionGraphic
+                    {
+                        Model = item, Object = marker, Renderer = renderer
+                    });
+                }
+            foreach (var pair in junctions)
+            {
+                var bodies = routeBodies[pair.Value.Model.ConnectorId];
+                if (!bodies.Contains(pair.Value.Renderer))
+                    bodies.Add(pair.Value.Renderer);
+            }
+        }
+
+        private static bool SameJunction(OneBitVisibleJunction a,
+            OneBitVisibleJunction b) =>
+            a.Cell.Equals(b.Cell) && a.PointQ.Equals(b.PointQ) &&
+            a.Channel == b.Channel && a.DirectionCount == b.DirectionCount;
+
+        private static void Retire(GameObject item)
+        {
+            item.SetActive(false);
+            if (UnityEngine.Application.isPlaying) Destroy(item);
+            else DestroyImmediate(item);
         }
 
         private void BuildSignalGroups()
@@ -93,10 +265,11 @@ namespace SiliconSandbox.Presentation
             }
         }
 
-        private void DrawComponent(PlacedOneBitComponent component)
+        private void DrawComponent(PlacedOneBitComponent component,
+            Transform root)
         {
             var body = Primitive("Component " + component.Id.ToString("D"),
-                PrimitiveType.Cube, generatedRoot);
+                PrimitiveType.Cube, root);
             body.transform.position = new Vector3(component.AnchorCell.X + 0.5f,
                 component.AnchorCell.Y + 0.5f, component.AnchorCell.Z + 0.5f);
             body.transform.localScale = new Vector3(0.78f, 0.78f, 0.78f);
@@ -117,7 +290,7 @@ namespace SiliconSandbox.Presentation
             foreach (var pin in component.BuildPins())
             {
                 var pinObject = Primitive("Pin " + pin.PinId.ToString("D"),
-                    PrimitiveType.Sphere, generatedRoot);
+                    PrimitiveType.Sphere, root);
                 pinObject.transform.position = Position(pin.Cell, pin.PointQ);
                 pinObject.transform.localScale = Vector3.one * 0.2f;
                 pinObject.AddComponent<WorldSelectablePart>().Initialize(
@@ -127,13 +300,14 @@ namespace SiliconSandbox.Presentation
             }
         }
 
-        private void DrawModule(PlacedOneBitModuleInstance module)
+        private void DrawModule(PlacedOneBitModuleInstance module,
+            Transform root)
         {
             var cells = module.OccupiedCells();
             foreach (var cell in cells)
             {
                 var body = Primitive("Module " + module.InstanceName,
-                    PrimitiveType.Cube, generatedRoot);
+                    PrimitiveType.Cube, root);
                 body.transform.position = new Vector3(cell.X + 0.5f,
                     cell.Y + 0.5f, cell.Z + 0.5f);
                 body.transform.localScale = Vector3.one * 0.82f;
@@ -147,7 +321,7 @@ namespace SiliconSandbox.Presentation
             if (cells.Count > 0)
             {
                 var label = new GameObject("Module label " + module.InstanceName);
-                label.transform.SetParent(generatedRoot, false);
+                label.transform.SetParent(root, false);
                 label.transform.position = new Vector3(cells[0].X + 0.5f,
                     cells[0].Y + 1.05f, cells[0].Z + 0.5f);
                 var mesh = label.AddComponent<TextMesh>();
@@ -161,7 +335,7 @@ namespace SiliconSandbox.Presentation
             foreach (var port in module.BuildPortBits())
             {
                 var marker = Primitive("Module port " + port.PortId.ToString("D"),
-                    PrimitiveType.Sphere, generatedRoot);
+                    PrimitiveType.Sphere, root);
                 marker.transform.position = Position(port.Cell, port.PointQ);
                 marker.transform.localScale = Vector3.one * 0.22f;
                 marker.AddComponent<WorldSelectablePart>().Initialize(
@@ -175,6 +349,7 @@ namespace SiliconSandbox.Presentation
         {
             var root = new GameObject("Connector " + route.Id.ToString("D"));
             root.transform.SetParent(generatedRoot, false);
+            routeRoots.Add(route.Id, root);
             var renderers = new List<Renderer>();
             routeBodies.Add(route.Id, renderers);
             routeFirstMembers.Add(route.Id,
@@ -262,23 +437,6 @@ namespace SiliconSandbox.Presentation
             DrawCylinder(root, connectorId, spanId, center, first, renderers);
             DrawCylinder(root, connectorId, spanId, first, second, renderers);
             DrawCylinder(root, connectorId, spanId, second, face, renderers);
-        }
-
-        private void DrawJunctions()
-        {
-            foreach (var junction in OneBitVisualTopology.Junctions(
-                session.Design.Topology))
-            {
-                var marker = Primitive("Junction " + junction.NodeId.ToString("D"),
-                    PrimitiveType.Sphere, generatedRoot);
-                marker.transform.position = RoutePosition(junction.Cell,
-                    junction.PointQ, junction.Channel);
-                marker.transform.localScale = Vector3.one * 0.34f;
-                marker.AddComponent<WorldSelectablePart>().Initialize(
-                    WorldPartKind.ConnectorNode, junction.ConnectorId,
-                    junction.NodeId);
-                routeBodies[junction.ConnectorId].Add(marker.GetComponent<Renderer>());
-            }
         }
 
         private static void DrawCylinder(Transform root, Guid connectorId,

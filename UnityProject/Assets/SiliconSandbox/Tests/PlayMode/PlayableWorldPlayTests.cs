@@ -15,6 +15,39 @@ namespace SiliconSandbox.Tests.PlayMode
     public sealed class PlayableWorldPlayTests
     {
         [UnityTest]
+        public IEnumerator LocalEditKeepsUnchangedGraphicsAndTargets()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var session = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>().Session;
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(6, 1, 6), GridOrientation.Default);
+            yield return null;
+            var first = session.Design.Components[0];
+            var firstObject = GameObject.Find("Component " + first.Id.ToString("D"));
+            Assert.That(firstObject, Is.Not.Null);
+            var firstName = firstObject.name;
+
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(18, 1, 18), GridOrientation.Default);
+            yield return null;
+            var second = session.Design.Components[1];
+            var secondObject = GameObject.Find("Component " + second.Id.ToString("D"));
+            Assert.That(GameObject.Find(firstName), Is.SameAs(firstObject),
+                "A distant edit must not rebuild the existing visual object.");
+            Assert.That(firstObject.GetComponent<WorldSelectablePart>().OwnerId,
+                Is.EqualTo(first.Id));
+
+            session.ConfigureSource(first.Id, LogicBit.Zero, false);
+            yield return null;
+            Assert.That(GameObject.Find(secondObject.name), Is.SameAs(secondObject));
+            Assert.That(GameObject.Find(firstName), Is.Not.SameAs(firstObject));
+            Assert.That(GameObject.Find(firstName)
+                .GetComponent<WorldSelectablePart>().OwnerId, Is.EqualTo(first.Id));
+        }
+
+        [UnityTest]
         public IEnumerator CapturedWorldReopensWithDesignButFreshSimulation()
         {
             SceneManager.LoadScene("PlayableWorld");
