@@ -11,14 +11,6 @@ using UnityEngine;
 
 namespace SiliconSandbox.Interaction
 {
-    public sealed class SavedWorldChoice
-    {
-        public Guid WorldId { get; }
-        public string WorldName { get; }
-        public SavedWorldChoice(Guid worldId, string worldName)
-        { WorldId = worldId; WorldName = worldName; }
-    }
-
     // First playable interaction shell. Every authored action goes through
     // OneBitWorldSession; ray hits supply IDs but never imply a connection.
     public sealed class OneBitWorldInteraction : MonoBehaviour
@@ -60,10 +52,10 @@ namespace SiliconSandbox.Interaction
         private Func<string> saveWorld;
         private Func<string> reopenWorld;
         private Func<OneBitPackageDraft, string> publishPackage;
-        private Func<IReadOnlyList<SavedWorldChoice>> listSavedWorlds;
-        private Func<Guid, string> loadSavedWorld;
-        private IReadOnlyList<SavedWorldChoice> savedWorldChoices =
-            Array.Empty<SavedWorldChoice>();
+        private Func<IReadOnlyList<WorldRecoveryChoice>> listSavedWorlds;
+        private Func<WorldRecoveryChoice, string> loadSavedWorld;
+        private IReadOnlyList<WorldRecoveryChoice> savedWorldChoices =
+            Array.Empty<WorldRecoveryChoice>();
         private bool browseWorlds;
         private Vector2 savedWorldScroll;
         private string persistenceMessage = "";
@@ -120,8 +112,8 @@ namespace SiliconSandbox.Interaction
 
         public void SetPersistenceActions(Func<string> save, Func<string> reopen,
             Func<OneBitPackageDraft, string> publish,
-            Func<IReadOnlyList<SavedWorldChoice>> list,
-            Func<Guid, string> load)
+            Func<IReadOnlyList<WorldRecoveryChoice>> list,
+            Func<WorldRecoveryChoice, string> load)
         {
             saveWorld = save ?? throw new ArgumentNullException(nameof(save));
             reopenWorld = reopen ?? throw new ArgumentNullException(nameof(reopen));
@@ -1425,7 +1417,7 @@ namespace SiliconSandbox.Interaction
                 "Reopen Saved"))
                 RunPersistence(reopenWorld);
             if (GUI.Button(new Rect(rect.x + 105f, rect.y + 266f, 170f, 32f),
-                "Browse saved worlds"))
+                "Browse saves/recovery"))
             {
                 try
                 {
@@ -1446,9 +1438,10 @@ namespace SiliconSandbox.Interaction
                 {
                     var choice = savedWorldChoices[i];
                     if (GUI.Button(new Rect(0f, i * 34f, 310f, 30f),
-                        choice.WorldName + "  " + choice.WorldId.ToString("D").Substring(0, 8)))
+                        choice.WorldName + "  " + choice.Kind + "  " +
+                        choice.SavedUtc.ToString("MM-dd HH:mm") + " UTC"))
                     {
-                        try { persistenceMessage = loadSavedWorld(choice.WorldId); }
+                        try { persistenceMessage = loadSavedWorld(choice); }
                         catch (Exception error) when (error is IOException ||
                             error is ArgumentException ||
                             error is InvalidOperationException ||

@@ -24,6 +24,7 @@ namespace SiliconSandbox.Bootstrap
         private Camera playerCamera;
         private CreativeCameraController controller;
         private string storageRootOverride;
+        private double nextAutosaveRealtime;
 
         public void SetStorageRootForVerification(string root)
         {
@@ -68,7 +69,8 @@ namespace SiliconSandbox.Bootstrap
             Interaction.Attach(Session, controller, Inventory);
             Interaction.SetPersistenceActions(SaveCurrentWorldFile,
                 ReopenCurrentWorldFile, PublishPackage, ListSavedWorlds,
-                OpenWorldFile);
+                OpenRecoveryChoice);
+            nextAutosaveRealtime = Time.realtimeSinceStartupAsDouble + 300d;
 
             var output = Environment.GetEnvironmentVariable(SmokeOutputVariable);
             if (!string.IsNullOrEmpty(output))
@@ -114,6 +116,7 @@ namespace SiliconSandbox.Bootstrap
                 (float)saved.Player.LookZ).normalized);
             WorldView.Attach(Session);
             Interaction.Attach(Session, controller, Inventory);
+            nextAutosaveRealtime = Time.realtimeSinceStartupAsDouble + 300d;
         }
 
         public string SaveCurrentWorldFile()
@@ -140,45 +143,37 @@ namespace SiliconSandbox.Bootstrap
             return OpenWorldFile(Context.WorldId);
         }
 
-        public IReadOnlyList<SavedWorldChoice> ListSavedWorlds()
+        public IReadOnlyList<WorldRecoveryChoice> ListSavedWorlds() =>
+            WorldRecoveryStore.List(StorageRoot);
+
+        public string OpenRecoveryChoice(WorldRecoveryChoice choice)
         {
-            var directory = Path.Combine(StorageRoot, "worlds");
-            var choices = new List<SavedWorldChoice>();
-            if (!Directory.Exists(directory)) return choices.AsReadOnly();
-            foreach (var path in Directory.GetFiles(directory, "*.ssworld"))
-            {
-                var text = Path.GetFileNameWithoutExtension(path);
-                if (!Guid.TryParseExact(text, "D", out var id) ||
-                    text != id.ToString("D")) continue;
-                try
-                {
-                    using (var input = File.OpenRead(path))
-                    {
-                        var loaded = WorldV1ArchiveCodec.Read(input);
-                        if (loaded.Snapshot.WorldId == id)
-                            choices.Add(new SavedWorldChoice(id,
-                                loaded.Snapshot.WorldName));
-                    }
-                }
-                catch (Exception error) when (error is IOException ||
-                    error is ArgumentException || error is InvalidOperationException)
-                {
-                    // A damaged world is not presented as a valid load choice.
-                    // Backup selection remains a separate recovery flow.
-                }
-            }
-            choices.Sort((first, second) => string.CompareOrdinal(
-                first.WorldName, second.WorldName));
-            return choices.AsReadOnly();
+            if (choice == null) throw new ArgumentNullException(nameof(choice));
+            var found = false;
+            foreach (var offered in ListSavedWorlds())
+                if (offered.WorldId == choice.WorldId &&
+                    offered.Kind == choice.Kind &&
+                    string.Equals(offered.Path, choice.Path,
+                        StringComparison.Ordinal)) found = true;
+            if (!found)
+                throw new InvalidOperationException(
+                    "Recovery choice is no longer a valid saved archive.");
+            return OpenArchiveFile(choice.Path, choice.WorldId);
         }
 
         public string OpenWorldFile(Guid worldId)
         {
             var root = StorageRoot;
-            AtomicPackageFilePublisher.Recover(root);
             var path = ModuleLibraryStore.WorldPath(root, worldId);
             if (!File.Exists(path))
                 throw new FileNotFoundException("No saved copy of this world exists.", path);
+            return OpenArchiveFile(path, worldId);
+        }
+
+        private string OpenArchiveFile(string path, Guid worldId)
+        {
+            var root = StorageRoot;
+            AtomicPackageFilePublisher.Recover(root);
             LoadedWorldV1Archive loaded;
             using (var input = new FileStream(path, FileMode.Open, FileAccess.Read,
                 FileShare.Read))
@@ -201,12 +196,42 @@ namespace SiliconSandbox.Bootstrap
                 input.Position = 0;
                 loaded = WorldV1ArchiveCodec.Read(input, copies);
             }
+            if (loaded.Snapshot.WorldId != worldId)
+                throw new InvalidDataException("Saved world identity changed.");
             OpenWorld(loaded.Snapshot);
             return loaded.UnavailableModuleVersionIds.Count == 0
                 ? "World reopened at simulation time zero."
                 : "World reopened with " + loaded.UnavailableModuleVersionIds.Count +
                   " unavailable exact module version(s).";
         }
+
+        private void Update()
+        {
+            if (!AutomaticSavingEnabled || Context == null ||
+                Time.realtimeSinceStartupAsDouble < nextAutosaveRealtime)
+                return;
+            nextAutosaveRealtime = Time.realtimeSinceStartupAsDouble + 300d;
+            try { WorldRecoveryStore.SaveAutosave(StorageRoot,
+                CaptureCurrentWorld(), DateTime.UtcNow); }
+            catch (Exception error) { Debug.LogError(
+                "SiliconSandbox autosave failed: " + error.Message); }
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (!AutomaticSavingEnabled || Context == null) return;
+            try { WorldRecoveryStore.SaveAutosave(StorageRoot,
+                CaptureCurrentWorld(), DateTime.UtcNow); }
+            catch (Exception error) { Debug.LogError(
+                "SiliconSandbox exit save failed: " + error.Message); }
+        }
+
+        private bool AutomaticSavingEnabled =>
+            !UnityEngine.Application.isEditor &&
+            string.IsNullOrEmpty(Environment.GetEnvironmentVariable(
+                SmokeOutputVariable)) &&
+            string.IsNullOrEmpty(Environment.GetEnvironmentVariable(
+                FirstPlayableBenchmarkRunner.OutputVariable));
 
         public string PublishPackage(OneBitPackageDraft draft)
         {

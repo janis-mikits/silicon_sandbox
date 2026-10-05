@@ -7,6 +7,7 @@ using SiliconSandbox.Authoring;
 using SiliconSandbox.Bootstrap;
 using SiliconSandbox.Contracts;
 using SiliconSandbox.Presentation;
+using SiliconSandbox.Persistence;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -15,6 +16,52 @@ namespace SiliconSandbox.Tests.PlayMode
 {
     public sealed class PlayableWorldPlayTests
     {
+        [UnityTest]
+        public IEnumerator DamagedManualCanReopenTimestampedAutosaveInScene()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            var testRoot = Environment.GetEnvironmentVariable(
+                "SILICON_SANDBOX_TEST_ROOT");
+            Assert.That(testRoot, Is.Not.Null.And.Not.Empty);
+            var storage = Path.Combine(testRoot,
+                "playmode-recovery-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(storage);
+            bootstrap.SetStorageRootForVerification(storage);
+            bootstrap.Session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(6, 1, 6), GridOrientation.Default);
+            var componentId = bootstrap.Session.Design.Components[0].Id;
+            var worldId = bootstrap.Context.WorldId;
+            bootstrap.SaveCurrentWorldFile();
+            var stamp = new DateTime(2026, 10, 5, 12, 0, 0,
+                DateTimeKind.Utc);
+            WorldRecoveryStore.SaveAutosave(storage,
+                bootstrap.CaptureCurrentWorld(), stamp);
+            File.WriteAllText(ModuleLibraryStore.WorldPath(storage, worldId),
+                "damaged; leave intact");
+
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            bootstrap.SetStorageRootForVerification(storage);
+            var choices = bootstrap.ListSavedWorlds();
+            Assert.That(choices.Count, Is.EqualTo(1));
+            Assert.That(choices[0].Kind, Is.EqualTo(WorldRecoveryKind.Autosave));
+            Assert.That(choices[0].SavedUtc, Is.EqualTo(stamp));
+            bootstrap.OpenRecoveryChoice(choices[0]);
+            Assert.That(bootstrap.Context.WorldId, Is.EqualTo(worldId));
+            Assert.That(bootstrap.Session.Design.Components[0].Id,
+                Is.EqualTo(componentId));
+            Assert.That(bootstrap.Session.Scheduler.Now,
+                Is.EqualTo(SiliconSandbox.Simulation.SimulationTime.Zero));
+            Assert.That(File.ReadAllText(ModuleLibraryStore.WorldPath(storage,
+                worldId)), Is.EqualTo("damaged; leave intact"));
+            Directory.Delete(storage, true);
+        }
+
         [UnityTest]
         public IEnumerator SaveAndReopenRealWorldFileRestartsOrdinarySimulation()
         {
