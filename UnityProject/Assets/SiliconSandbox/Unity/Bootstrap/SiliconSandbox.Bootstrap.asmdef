@@ -1,6 +1,6 @@
 {
   "name": "SiliconSandbox.Bootstrap",
   "rootNamespace": "SiliconSandbox.Bootstrap",
-  "references": ["SiliconSandbox.Contracts", "SiliconSandbox.Authoring", "SiliconSandbox.Graph", "SiliconSandbox.Simulation", "SiliconSandbox.Application", "SiliconSandbox.Presentation", "SiliconSandbox.Interaction"],
+  "references": ["SiliconSandbox.Contracts", "SiliconSandbox.Authoring", "SiliconSandbox.Graph", "SiliconSandbox.Simulation", "SiliconSandbox.Application", "SiliconSandbox.Persistence", "SiliconSandbox.Presentation", "SiliconSandbox.Interaction"],
   "autoReferenced": true
 }

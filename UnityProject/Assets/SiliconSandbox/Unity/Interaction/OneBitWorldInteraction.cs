@@ -64,12 +64,34 @@ namespace SiliconSandbox.Interaction
             CreativeCameraController cameraController,
             OneBitPlayerInventory playerInventory = null)
         {
+            ClearRotationPreview();
+            if (selectionRoot != null)
+            {
+                selectionRoot.SetActive(false);
+                Destroy(selectionRoot);
+                selectionRoot = null;
+            }
+            selectionFirst = null;
+            selectionSecond = null;
+            packageDraft = null;
+            packageError = "";
+            wireStart = null;
+            hovered = null;
+            hasHit = false;
+            inventoryOpen = false;
+            configureOpen = false;
+            inspectOpen = false;
+            pauseMenuOpen = false;
+            observedRevision = ulong.MaxValue;
+            fractionalPicoseconds = 0d;
+            HideGhost();
             session = activeSession ?? throw new ArgumentNullException(nameof(activeSession));
             inventory = playerInventory ?? OneBitPlayerInventory.NewFreeplay();
             player = cameraController ?? throw new ArgumentNullException(nameof(cameraController));
             viewCamera = player.CameraPivot.GetComponent<Camera>();
             if (viewCamera == null) throw new ArgumentException("Player camera is missing.");
             frequencyText = session.Scheduler.FrequencyHz;
+            player.SetInterfaceOpen(false);
         }
 
         private void Update()

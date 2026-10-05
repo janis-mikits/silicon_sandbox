@@ -15,6 +15,44 @@ namespace SiliconSandbox.Tests.PlayMode
     public sealed class PlayableWorldPlayTests
     {
         [UnityTest]
+        public IEnumerator CapturedWorldReopensWithDesignButFreshSimulation()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            bootstrap.Session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(6, 1, 6), GridOrientation.Default,
+                LogicBit.One, false);
+            var source = bootstrap.Session.Design.Components[0];
+            bootstrap.Session.ToggleSource(source.Id);
+            bootstrap.Inventory.SelectHotbar(3);
+            bootstrap.Interaction.transform.position = new Vector3(7f, 2f, 8f);
+            var saved = bootstrap.CaptureCurrentWorld();
+            Assert.That(bootstrap.Session.Circuit.Source(source.Id).IsOn, Is.True);
+
+            bootstrap.OpenWorld(saved);
+            yield return null;
+            Assert.That(bootstrap.Session.Design.Components[0].Id,
+                Is.EqualTo(source.Id));
+            Assert.That(bootstrap.Session.Circuit.Source(source.Id).IsOn,
+                Is.False);
+            Assert.That(bootstrap.Session.Scheduler.Now,
+                Is.EqualTo(SiliconSandbox.Simulation.SimulationTime.Zero));
+            Assert.That(bootstrap.Session.Scheduler.ClockLevel,
+                Is.EqualTo(LogicBit.Zero));
+            Assert.That(bootstrap.Inventory.SelectedHotbarSlot, Is.EqualTo(3));
+            Assert.That(bootstrap.WorldView.Session,
+                Is.SameAs(bootstrap.Session));
+            Assert.That(bootstrap.Interaction.Session,
+                Is.SameAs(bootstrap.Session));
+            Assert.That(bootstrap.Interaction.transform.position.x,
+                Is.EqualTo(7f).Within(0.01f));
+            Assert.That(GameObject.Find("Component " + source.Id.ToString("D")),
+                Is.Not.Null);
+        }
+
+        [UnityTest]
         public IEnumerator GeneratedFloorAndFourWallsMatchAuthoredWorldBounds()
         {
             SceneManager.LoadScene("PlayableWorld");

@@ -24,6 +24,20 @@ namespace SiliconSandbox.Interaction
         public void SetCameraPivot(Transform pivot) => cameraPivot = pivot;
         public void SetWorldBounds(WorldBounds bounds) => worldBounds = bounds;
 
+        public void SetViewDirection(Vector3 direction)
+        {
+            if (direction.sqrMagnitude < 0.999f ||
+                direction.sqrMagnitude > 1.001f)
+                throw new System.ArgumentException("View direction must be normalized.");
+            var yaw = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
+            pitch = Mathf.Clamp(-Mathf.Asin(direction.y) * Mathf.Rad2Deg,
+                -89f, 89f);
+            transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            if (cameraPivot != null)
+                cameraPivot.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+            verticalVelocity = 0f;
+        }
+
         public void SetInterfaceOpen(bool open)
         {
             interfaceOpen = open;
