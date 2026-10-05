@@ -24,28 +24,42 @@ namespace SiliconSandbox.Bootstrap
         private TextMesh yLabel;
         private bool built;
         private AndFixtureDesign authoredFixture;
+        private OneBitAuthoredTopology topology;
+        private BuiltOneBitCircuitPlan builtPlan;
+        private List<OneBitComponent> components;
         private System.Guid hoveredConnectorId;
         private System.Guid selectedConnectorId;
 
-        public OneBitAndCircuit Circuit { get; private set; }
-        public AndFixtureInspection Inspector { get; private set; }
-        public OneBitAuthoredTopology AuthoredTopology => authoredFixture?.Topology;
+        public GraphDrivenOneBitCircuit Circuit { get; private set; }
+        public OneBitCircuitInspection Inspector { get; private set; }
+        public OneBitAuthoredTopology AuthoredTopology => topology;
+        public ResolvedBit A => PinValue(authoredFixture.Gate, "A");
+        public ResolvedBit B => PinValue(authoredFixture.Gate, "B");
+        public ResolvedBit Y => PinValue(authoredFixture.Gate, "Y");
 
         public void Build()
         {
             if (built) return;
             built = true;
             authoredFixture = AndFixtureDesign.Create();
-            Circuit = new OneBitAndCircuit(AndFixtureGraphBuilder.Build(authoredFixture));
-            Inspector = new AndFixtureInspection(authoredFixture, Circuit);
+            topology = authoredFixture.Topology;
+            components = new List<OneBitComponent>
+            {
+                Component(authoredFixture.SourceA, "OUT"),
+                Component(authoredFixture.SourceB, "OUT"),
+                Component(authoredFixture.Gate, "A", "B", "Y")
+            };
+            builtPlan = OneBitCircuitPlanBuilder.Build(topology, components);
+            Circuit = new GraphDrivenOneBitCircuit(builtPlan.Plan);
+            Inspector = new OneBitCircuitInspection(topology, components, builtPlan, Circuit);
 
             CreateBody("Fixture Source A", new Vector3(10.5f, 1.5f, 14.5f), new Color(0.65f, 0.65f, 0.8f));
             CreateBody("Fixture Source B", new Vector3(10.5f, 1.5f, 17.5f), new Color(0.65f, 0.65f, 0.8f));
             CreateBody(GateObjectName, new Vector3(16.5f, 1.5f, 15.5f), new Color(0.85f, 0.7f, 0.3f));
 
-            MakeRoute(AConnectorName, aRenderers, authoredFixture.Topology.Connectors[0]);
-            MakeRoute(BConnectorName, bRenderers, authoredFixture.Topology.Connectors[1]);
-            MakeRoute(YConnectorName, yRenderers, authoredFixture.Topology.Connectors[2]);
+            MakeRoute(AConnectorName, aRenderers, topology.Connectors[0]);
+            MakeRoute(BConnectorName, bRenderers, topology.Connectors[1]);
+            MakeRoute(YConnectorName, yRenderers, topology.Connectors[2]);
 
             aLabel = MakeLabel("Fixture A Label", new Vector3(10f, 2.4f, 14f));
             bLabel = MakeLabel("Fixture B Label", new Vector3(10f, 2.4f, 17f));
@@ -59,8 +73,8 @@ namespace SiliconSandbox.Bootstrap
         // Development-fixture control; changes configured source value and current On state.
         public void SetInputs(LogicBit a, LogicBit b)
         {
-            Circuit.ConfigureA(a, true);
-            Circuit.ConfigureB(b, true);
+            Circuit.ConfigureSource(authoredFixture.SourceA.Id, a, true);
+            Circuit.ConfigureSource(authoredFixture.SourceB.Id, b, true);
             Circuit.AdvanceToSettled();
             RefreshPresentation();
         }
@@ -69,9 +83,11 @@ namespace SiliconSandbox.Bootstrap
         {
             if (!built) return;
             if (Input.GetKeyDown(KeyCode.Alpha1))
-                SetInputs(Next(Circuit.SourceA.Drive), Circuit.SourceB.Drive);
+                SetInputs(Next(Circuit.Source(authoredFixture.SourceA.Id).Drive),
+                    Circuit.Source(authoredFixture.SourceB.Id).Drive);
             if (Input.GetKeyDown(KeyCode.Alpha2))
-                SetInputs(Circuit.SourceA.Drive, Next(Circuit.SourceB.Drive));
+                SetInputs(Circuit.Source(authoredFixture.SourceA.Id).Drive,
+                    Next(Circuit.Source(authoredFixture.SourceB.Id).Drive));
             var camera = Camera.main;
             hoveredConnectorId = System.Guid.Empty;
             if (camera != null && Physics.Raycast(camera.transform.position,
@@ -83,7 +99,7 @@ namespace SiliconSandbox.Bootstrap
             if (Input.GetKeyDown(KeyCode.I) && hoveredConnectorId != System.Guid.Empty)
                 selectedConnectorId = hoveredConnectorId;
             if (Input.GetKeyDown(KeyCode.Escape)) selectedConnectorId = System.Guid.Empty;
-            if (Circuit.A.Value == LogicBit.X || Circuit.B.Value == LogicBit.X || Circuit.Y.Value == LogicBit.X)
+            if (A.Value == LogicBit.X || B.Value == LogicBit.X || Y.Value == LogicBit.X)
                 RefreshPresentation();
         }
 
@@ -137,12 +153,23 @@ namespace SiliconSandbox.Bootstrap
 
         private void RefreshPresentation()
         {
-            aLabel.text = "A = " + Circuit.A.Value.ToSymbol();
-            bLabel.text = "B = " + Circuit.B.Value.ToSymbol();
-            yLabel.text = "Y = " + Circuit.Y.Value.ToSymbol();
-            SetSignalColor(aRenderers, Circuit.A.Value);
-            SetSignalColor(bRenderers, Circuit.B.Value);
-            SetSignalColor(yRenderers, Circuit.Y.Value);
+            aLabel.text = "A = " + A.Value.ToSymbol();
+            bLabel.text = "B = " + B.Value.ToSymbol();
+            yLabel.text = "Y = " + Y.Value.ToSymbol();
+            SetSignalColor(aRenderers, A.Value);
+            SetSignalColor(bRenderers, B.Value);
+            SetSignalColor(yRenderers, Y.Value);
+        }
+
+        private ResolvedBit PinValue(FixtureComponent component, string key) =>
+            Circuit.Net(builtPlan.NetIndex(JoinMember.ComponentPin(component.Id,
+                component.Pin(key).PinId)));
+
+        private static OneBitComponent Component(FixtureComponent fixture, params string[] keys)
+        {
+            var pins = new Dictionary<string, System.Guid>();
+            foreach (var key in keys) pins.Add(key, fixture.Pin(key).PinId);
+            return new OneBitComponent(fixture.Id, fixture.TypeId, fixture.TypeVersion, pins);
         }
 
         private static void SetSignalColor(IEnumerable<Renderer> renderers, LogicBit value)

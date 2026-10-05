@@ -45,9 +45,9 @@ namespace SiliconSandbox.Tests.PlayMode
             foreach (var sample in cases)
             {
                 fixture.SetInputs(sample[0], sample[1]);
-                Assert.That(fixture.Circuit.A.Value, Is.EqualTo(sample[0]));
-                Assert.That(fixture.Circuit.B.Value, Is.EqualTo(sample[1]));
-                Assert.That(fixture.Circuit.Y.Value, Is.EqualTo(sample[2]));
+                Assert.That(fixture.A.Value, Is.EqualTo(sample[0]));
+                Assert.That(fixture.B.Value, Is.EqualTo(sample[1]));
+                Assert.That(fixture.Y.Value, Is.EqualTo(sample[2]));
                 Assert.That(GameObject.Find("Fixture Y Label").GetComponent<TextMesh>().text,
                     Is.EqualTo("Y = " + sample[2].ToSymbol()));
             }

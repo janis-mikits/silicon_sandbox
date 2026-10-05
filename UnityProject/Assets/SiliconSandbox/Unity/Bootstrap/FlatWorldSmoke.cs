@@ -21,7 +21,7 @@ namespace SiliconSandbox.Bootstrap
                 return;
 
             var valid = GetComponent<Collider>() != null && Camera.main != null &&
-                fixture.Circuit != null && fixture.Circuit.Y.Value == LogicBit.Zero &&
+                fixture.Circuit != null && fixture.Y.Value == LogicBit.Zero &&
                 GameObject.Find(AndCircuitFixture.GateObjectName) != null;
             File.WriteAllText(output, valid ? "PASS\n" : "FAIL\n");
             Application.Quit(valid ? 0 : 1);
