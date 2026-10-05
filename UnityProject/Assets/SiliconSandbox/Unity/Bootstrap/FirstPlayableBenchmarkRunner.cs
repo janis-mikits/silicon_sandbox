@@ -9,6 +9,7 @@ using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Persistence;
 using UnityEngine;
+using UnityEngine.Profiling;
 using Debug = UnityEngine.Debug;
 using BigInteger = System.Numerics.BigInteger;
 
@@ -18,6 +19,8 @@ namespace SiliconSandbox.Bootstrap
     public sealed class FirstPlayableBenchmarkRunner : MonoBehaviour
     {
         public const string OutputVariable = "SILICON_SANDBOX_BENCHMARK_OUTPUT";
+        public const string NativeDiagnosticVariable =
+            "SILICON_SANDBOX_BENCHMARK_NATIVE_DIAGNOSTIC";
         private const double WarmupSeconds = 10d;
         private const double MeasureSeconds = 60d;
         private const string ReferenceName = "first-playable-1000-gates";
@@ -62,8 +65,14 @@ namespace SiliconSandbox.Bootstrap
             // logical desktop is smaller; fullscreen-window keeps the display
             // mode while requesting a 1920x1080 rendered content resolution.
             Screen.SetResolution(1920, 1080, FullScreenMode.FullScreenWindow);
-            yield return null;
-            if (Screen.width != 1920 || Screen.height != 1080)
+            var resolutionDeadline = Time.realtimeSinceStartupAsDouble + 5d;
+            do { yield return null; }
+            while ((Screen.width != 1920 || Screen.height != 1080) &&
+                Time.realtimeSinceStartupAsDouble < resolutionDeadline);
+            var diagnosticNative = Environment.GetEnvironmentVariable(
+                NativeDiagnosticVariable) == "1";
+            if ((Screen.width != 1920 || Screen.height != 1080) &&
+                !diagnosticNative)
             {
                 Finish("UNVERIFIED: actual display resolution is " +
                     Screen.width + "x" + Screen.height + ", not 1920x1080.", 1);
@@ -103,6 +112,9 @@ namespace SiliconSandbox.Bootstrap
             session = bootstrap.Session;
             yield return null;
 
+            if (diagnosticNative)
+                report.AppendLine("DIAGNOSTIC ONLY: strict 1920x1080 guard" +
+                    " bypassed; actual measured resolution is below.");
             report.AppendLine("REFERENCE ARCHIVE SHA-256=" + referenceHash);
             report.AppendLine("Frame and clock measurements alone do not establish full performance acceptance.");
             report.AppendLine("OS=" + SystemInfo.operatingSystem);
@@ -135,12 +147,15 @@ namespace SiliconSandbox.Bootstrap
                 FindObjectsByType<Renderer>(FindObjectsSortMode.None).Length);
             report.AppendLine("Camera path: stationary (30,0.3,12) facing east;" +
                 " flying linear (8,0.3,5)->(100,0.3,60), looking 12 cells ahead.");
+            report.AppendLine("Activity: first standalone B=1, other B inputs float;" +
+                " active Y transitions are 0/1 or 0/X on 10 Hz edges.");
 
             yield return RunCase("idle/stationary", false, false);
             yield return RunCase("active/stationary", true, false);
             yield return RunCase("idle/flying", false, true);
             yield return RunCase("active/flying", true, true);
-            Finish("REFERENCE FRAME RUN COMPLETE", 0);
+            yield return RunOperations();
+            Finish("REFERENCE MEASUREMENT COMPLETE", 0);
         }
 
         private static void ValidateReference(WorldSaveSnapshot snapshot)
@@ -170,6 +185,9 @@ namespace SiliconSandbox.Bootstrap
             fractionalPicoseconds = 0d;
             simulationTicks = 0L;
             var samples = new List<double>();
+            var mainThreadMs = new List<double>();
+            var gpuMs = new List<double>();
+            var timing = new FrameTiming[1];
             var start = Time.realtimeSinceStartupAsDouble;
             var last = start;
             var measuredStart = 0d;
@@ -196,6 +214,14 @@ namespace SiliconSandbox.Bootstrap
                 }
                 if (!sampling) continue;
                 samples.Add(frameSeconds);
+                FrameTimingManager.CaptureFrameTimings();
+                if (FrameTimingManager.GetLatestTimings(1, timing) > 0)
+                {
+                    if (timing[0].cpuMainThreadFrameTime > 0d)
+                        mainThreadMs.Add(timing[0].cpuMainThreadFrameTime);
+                    if (timing[0].gpuFrameTime > 0d)
+                        gpuMs.Add(timing[0].gpuFrameTime);
+                }
                 if (now - measuredStart >= MeasureSeconds) break;
             }
             session.Scheduler.StopClock();
@@ -213,7 +239,76 @@ namespace SiliconSandbox.Bootstrap
                 " edges=" + edges +
                 " achieved cycles/s=" + F((double)edges / 2d / seconds) +
                 " simulation CPU ms=" + F(simulationTicks * 1000d /
-                    Stopwatch.Frequency));
+                    Stopwatch.Frequency) +
+                " main-thread mean ms=" + MeanOrUnavailable(mainThreadMs) +
+                " GPU mean ms=" + MeanOrUnavailable(gpuMs) +
+                " reserved memory MiB=" + F(
+                    Profiler.GetTotalReservedMemoryLong() / 1048576d));
+            File.WriteAllText(outputPath, report.ToString());
+        }
+
+        private IEnumerator RunOperations()
+        {
+            report.AppendLine("Edit positions: (15,1,50)->(17,1,50) and" +
+                " (31,1,50)->(33,1,50), crossing x=16 and x=32 grid lines.");
+            report.AppendLine("Renderer has per-object reconciliation, no spatial" +
+                " render-region partition; a region-boundary claim is unverified.");
+            foreach (var x in new[] { 15, 31 })
+            {
+                var start = Stopwatch.GetTimestamp();
+                session.PlaceComponent(BuiltInPinCatalog.And,
+                    new GridCell(x, 1, 50), GridOrientation.Default);
+                yield return null;
+                RecordLatency("place AND x=" + x, start, 100d);
+                var gate = session.Design.Components[
+                    session.Design.Components.Count - 1];
+
+                start = Stopwatch.GetTimestamp();
+                session.PlaceWireStub(JoinMember.ComponentPin(gate.Id,
+                    gate.PinIds["Y"]), new GridCell(x + 2, 1, 50));
+                yield return null;
+                RecordLatency("place connector x=" + x, start, 100d);
+                var route = session.Design.Topology.Connectors[
+                    session.Design.Topology.Connectors.Count - 1];
+
+                start = Stopwatch.GetTimestamp();
+                session.BreakSpan(route.Id, route.Spans[0].Id);
+                yield return null;
+                RecordLatency("break connector x=" + x, start, 100d);
+
+                start = Stopwatch.GetTimestamp();
+                if (!session.TryUndo())
+                    throw new InvalidOperationException("Benchmark undo failed.");
+                yield return null;
+                RecordLatency("undo break x=" + x, start, 100d);
+            }
+
+            bootstrap.SetStorageRootForVerification(
+                Path.GetDirectoryName(Path.GetFullPath(outputPath)));
+            var saveStart = Stopwatch.GetTimestamp();
+            bootstrap.SaveCurrentWorldFile();
+            RecordLatency("manual save", saveStart, 2000d);
+            var loadStart = Stopwatch.GetTimestamp();
+            bootstrap.ReopenCurrentWorldFile();
+            yield return null;
+            RecordLatency("load and first rendered frame", loadStart, 5000d);
+        }
+
+        private void RecordLatency(string label, long started, double budgetMs)
+        {
+            var ms = (Stopwatch.GetTimestamp() - started) * 1000d /
+                Stopwatch.Frequency;
+            report.AppendLine("OP=" + label + " latency ms=" + F(ms) +
+                " provisional target ms=" + F(budgetMs) +
+                " result=" + (ms <= budgetMs ? "within" : "over"));
+        }
+
+        private static string MeanOrUnavailable(List<double> samples)
+        {
+            if (samples.Count == 0) return "unavailable";
+            var sum = 0d;
+            foreach (var sample in samples) sum += sample;
+            return F(sum / samples.Count);
         }
 
         private void AdvanceSimulation(double frameSeconds)

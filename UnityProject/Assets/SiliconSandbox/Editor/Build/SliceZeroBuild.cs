@@ -55,6 +55,7 @@ namespace SiliconSandbox.EditorBuild
             if (!File.Exists(PlayableScenePath))
                 throw new InvalidOperationException("Playable scene is missing.");
             PlayerSettings.productName = "SiliconSandbox";
+            PlayerSettings.enableFrameTimingStats = true;
             var target = EditorUserBuildSettings.activeBuildTarget;
             string destination;
             if (target == BuildTarget.StandaloneOSX)

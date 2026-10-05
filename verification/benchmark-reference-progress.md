@@ -13,3 +13,25 @@ Result on 5 October 2026: 190 Edit Mode tests passed, 13 Play Mode tests passed,
 Graphical measurement command: `scripts/benchmark-mac.sh`. The first attempt stalled with the terminal-launched player in the background; it was stopped and `Application.runInBackground` enabled for this opt-in runner. Two later attempts exited with an explicit `UNVERIFIED` report because Unity reported 3024×1898 for the actual player surface after a 1920×1080 request, including a fullscreen-window request. No FPS or clock-throughput measurement was collected. The required 1080p Mac acceptance is **unverified**, not passed. The graphical runner also does not yet measure scripted place/break/undo, manual save/load latency, GPU time, or renderer rebuild time. Windows performance and native checks remain deferred under the user's stated waiver; no Windows pass is claimed.
 
 Changed files for this slice: benchmark fixture factory and player runner, editor reference builder/assembly, frozen archive and Unity `.meta` files, benchmark shell wrapper, the asset-hash Edit Mode test, this report, and the performance protocol note. The benchmark asset is generated only once by the Editor builder; it refuses to overwrite an existing reference.
+
+## Strict Mac run, 5 October 2026
+
+The earlier resolution failures were caused by checking one frame after `Screen.SetResolution`; Unity applied 1920×1080 a little later. The runner now waits up to five real seconds for the exact size, failing if it never appears. A diagnostic run at the prior guard setting showed the late transition, then this strict command completed without the diagnostic override:
+
+```sh
+scripts/verify-unity.sh --editor '/Applications/Unity/Hub/Editor/6000.3.24f1/Unity.app/Contents/MacOS/Unity' --target StandaloneOSX
+scripts/benchmark-mac.sh
+```
+
+Verification: **192 Edit Mode passed, 15 Play Mode passed, Mac build, startup, built-player save/reopen and exit-autosave passed**. Benchmark report: `UnityProject/Logs/Verification/benchmark-mac-reference-20261005T174210Z.txt` (ignored generated result). The fixed archive hash matched. Machine: macOS 26.6.2, Apple M4 CPU/GPU, 16 GiB RAM, Unity 6000.3.24f1. Player report: 1920×1080, Standard, 100% built-in render scale, VSync off, uncapped; 500 standalone + ten × 50 module AND gates, 1,011 connectors, 1,013 spans, no registers, one-bit wires, and 7,077 total renderer objects.
+
+| Case | Average FPS | p99 frame ms | Max frame ms | Processed edges | Mean main/GPU ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Idle/stationary | 231.044 | 4.860 | 6.236 | 0 | 4.327 / 3.219 |
+| Active/stationary | 195.930 | 7.266 | 10.042 | 1,200 | 5.087 / 3.334 |
+| Idle/flying | 745.881 | 5.725 | 6.440 | 0 | 1.331 / 0.868 |
+| Active/flying | 645.446 | 6.971 | 9.699 | 1,200 | 1.544 / 0.910 |
+
+Every case warmed for ten seconds and measured for at least 60 seconds. All four Mac averages exceed 60 FPS and all p99 values are below the 33.3 ms investigation threshold. Both active cases processed the complete 1,200-edge, 10 Hz nominal 60-second schedule. The report divides by the slightly extended final-frame window and shows 9.999 and 10.000 cycles/s respectively; this is measurement-window rounding, not a dropped edge. Simulation CPU work over each active 60-second case was 446–503 ms. Reserved memory reached 190 MiB.
+
+At two scripted grid lines, place AND took 31–34 ms, place connector 43–46 ms, break connector 41–45 ms, and undo 20–21 ms. Manual save took 172 ms; load through first rendered frame took 299 ms. All measured operations met their provisional budgets. The renderer currently reconciles objects by identity and has no spatial render-region partition, so the prescribed *render-region boundary* edit check is still unverified. The report counts all renderer objects, not the per-camera visible subset. Additional sparse/dense shape comparisons, a manual visual walkthrough, and Windows measurements have not run. The user temporarily waived Windows verification; no Windows result or full cross-platform acceptance is claimed. CI remains unrun without a safely configured licensed runner.
