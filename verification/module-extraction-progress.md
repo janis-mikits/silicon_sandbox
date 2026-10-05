@@ -30,6 +30,10 @@ The Unity presentation renders module footprints and exact port positions as
 targetable objects. The interaction shell can wire module ports, attach a
 world-clock stub to their CLK port, and inspect a port's settled value.
 These scene behaviors compile offline but have not run in Unity's Test Runner.
+The new Play Mode test builds and clocks two instances in `PlayableWorld`,
+then hides the entire world view and moves the camera away while the world
+clock runs through the next rising edge. It checks the accepted A/B result
+after re-enabling presentation. That test has compiled but has **not** run.
 For a one-cell package, the draft port layout suggests all three SR inputs on
 one face and Q/Q_bar on the opposite face, retaining exact internal target
 references. The player-facing package configuration and durable confirmation

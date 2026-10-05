@@ -1,4 +1,6 @@
+using System;
 using System.Collections;
+using SiliconSandbox.Application;
 using NUnit.Framework;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Bootstrap;
@@ -12,6 +14,86 @@ namespace SiliconSandbox.Tests.PlayMode
 {
     public sealed class PlayableWorldPlayTests
     {
+        [UnityTest]
+        public IEnumerator TwoModulesKeepExpectedStateWhileViewAndCameraAreAway()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            var version = SrVersion();
+            var session = bootstrap.Session;
+            session.PlaceModule(version, "A", new GridCell(6, 1, 6),
+                GridOrientation.Default);
+            session.PlaceModule(version, "B", new GridCell(16, 1, 6),
+                GridOrientation.Default);
+            var a = session.Design.Modules[0];
+            var b = session.Design.Modules[1];
+            var sources = new[]
+            {
+                new GridCell(4,1,6), new GridCell(4,1,8),
+                new GridCell(14,1,6), new GridCell(14,1,8)
+            };
+            foreach (var cell in sources)
+                session.PlaceComponent(BuiltInPinCatalog.Source, cell,
+                    GridOrientation.Default, LogicBit.One, false);
+            var aS = session.Design.Components[0];
+            var aR = session.Design.Components[1];
+            var bS = session.Design.Components[2];
+            var bR = session.Design.Components[3];
+            session.ConnectPins(SourceOut(aS), Port(a, version.Ports[0].Id));
+            session.ConnectPins(SourceOut(aR), Port(a, version.Ports[1].Id));
+            session.ConnectPins(SourceOut(bS), Port(b, version.Ports[0].Id));
+            session.ConnectPins(SourceOut(bR), Port(b, version.Ports[1].Id));
+            session.AttachWorldClockPort(a.Id, version.Ports[2].Id);
+            session.AttachWorldClockPort(b.Id, version.Ports[2].Id);
+            yield return null;
+
+            var foundA = false; var foundB = false;
+            foreach (var part in UnityEngine.Object.FindObjectsByType<WorldSelectablePart>(
+                FindObjectsSortMode.None))
+                if (part.Kind == WorldPartKind.ModulePort &&
+                    part.PartId == version.Ports[3].Id)
+                {
+                    if (part.OwnerId == a.Id) foundA = true;
+                    if (part.OwnerId == b.Id) foundB = true;
+                }
+            Assert.That(foundA && foundB, Is.True);
+
+            session.ToggleSource(aS.Id);
+            session.Scheduler.StepClockEdge();
+            session.ToggleSource(aS.Id);
+            session.ToggleSource(bR.Id);
+            session.Scheduler.StepClockEdge();
+            session.Scheduler.StepClockEdge();
+            Assert.That(session.Inspector.InspectModulePort(a.Id,
+                version.Ports[3].Id).Value, Is.EqualTo(LogicBit.One));
+            Assert.That(session.Inspector.InspectModulePort(b.Id,
+                version.Ports[3].Id).Value, Is.EqualTo(LogicBit.Zero));
+
+            session.ToggleSource(aR.Id);
+            session.ToggleSource(bR.Id);
+            bootstrap.Interaction.transform.position = new Vector3(30f, 2f, 30f);
+            bootstrap.WorldView.gameObject.SetActive(false);
+            session.Scheduler.ResumeSimulation();
+            session.Scheduler.StartClock();
+            session.Scheduler.AdvanceUntil(session.Scheduler.NextClockEdge.Value);
+            session.Scheduler.AdvanceUntil(session.Scheduler.NextClockEdge.Value);
+            session.Scheduler.StopClock();
+            session.Scheduler.PauseSimulation();
+            Assert.That(session.Inspector.InspectModulePort(a.Id,
+                version.Ports[3].Id).Value, Is.EqualTo(LogicBit.Zero));
+            Assert.That(session.Inspector.InspectModulePort(b.Id,
+                version.Ports[3].Id).Value, Is.EqualTo(LogicBit.Zero));
+
+            bootstrap.WorldView.gameObject.SetActive(true);
+            yield return null;
+            Assert.That(session.Inspector.InspectModulePort(a.Id,
+                version.Ports[3].Id).Value, Is.EqualTo(LogicBit.Zero));
+            Assert.That(session.Inspector.InspectModulePort(b.Id,
+                version.Ports[3].Id).Value, Is.EqualTo(LogicBit.Zero));
+        }
+
         [UnityTest]
         public IEnumerator BlankWorldPlacesASelectableSourceAndShowsLiveValue()
         {
@@ -31,7 +113,7 @@ namespace SiliconSandbox.Tests.PlayMode
             Assert.That(GameObject.Find("Component " + source.Id.ToString("D")),
                 Is.Not.Null);
             var pickedPin = false;
-            foreach (var part in Object.FindObjectsByType<WorldSelectablePart>(
+            foreach (var part in UnityEngine.Object.FindObjectsByType<WorldSelectablePart>(
                 FindObjectsSortMode.None))
                 if (part.Kind == WorldPartKind.ComponentPin &&
                     part.OwnerId == source.Id &&
@@ -61,7 +143,7 @@ namespace SiliconSandbox.Tests.PlayMode
             yield return null;
             var stub = bootstrap.Session.Design.Topology.Connectors[0];
             var found = false;
-            foreach (var part in Object.FindObjectsByType<WorldSelectablePart>(
+            foreach (var part in UnityEngine.Object.FindObjectsByType<WorldSelectablePart>(
                 FindObjectsSortMode.None))
                 if (part.Kind == WorldPartKind.ConnectorNode && part.OwnerId == stub.Id)
                     found = true;
@@ -72,5 +154,39 @@ namespace SiliconSandbox.Tests.PlayMode
                 sr.Id, sr.PinIds["CLK"]);
             Assert.That(clockPin.Value, Is.EqualTo(LogicBit.One));
         }
+
+        private static OneBitModuleVersion SrVersion()
+        {
+            var source = OneBitWorldEdits.PlaceComponent(OneBitWorldDesign.Empty(
+                new WorldBounds(8, 8, 4)), BuiltInPinCatalog.SrFlipFlop,
+                new GridCell(2, 1, 2), GridOrientation.Default);
+            var snapshot = OneBitModuleSnapshotBuilder.Preview(source,
+                new CellRegion(new GridCell(2, 1, 2), new GridCell(2, 1, 2)));
+            var sr = snapshot.Components[0];
+            return OneBitModuleVersionFactory.Create(snapshot, Guid.NewGuid(), "SR",
+                new[]
+                {
+                    PortChoice("S", OneBitPortDirection.Input, sr,
+                        new QuarterPoint(0, 1, 1)),
+                    PortChoice("R", OneBitPortDirection.Input, sr,
+                        new QuarterPoint(0, 3, 1)),
+                    PortChoice("CLK", OneBitPortDirection.Input, sr,
+                        new QuarterPoint(1, 1, 0)),
+                    PortChoice("Q", OneBitPortDirection.Output, sr,
+                        new QuarterPoint(4, 1, 1))
+                });
+        }
+
+        private static OneBitPortChoice PortChoice(string name,
+            OneBitPortDirection direction, PlacedOneBitComponent sr,
+            QuarterPoint point) => new OneBitPortChoice(name, direction,
+                new GridCell(0, 0, 0), point,
+                JoinMember.ComponentPin(sr.Id, sr.PinIds[name]));
+
+        private static JoinMember SourceOut(PlacedOneBitComponent source) =>
+            JoinMember.ComponentPin(source.Id, source.PinIds["OUT"]);
+
+        private static JoinMember Port(PlacedOneBitModuleInstance module,
+            Guid portId) => JoinMember.ModulePortBit(module.Id, portId, 0);
     }
 }
