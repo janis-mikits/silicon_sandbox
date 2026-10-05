@@ -19,6 +19,9 @@ namespace SiliconSandbox.Application
         public WorldSimulationScheduler Scheduler { get; }
         public ulong Revision { get; private set; }
         public bool HasModuleVersion(Guid versionId) => versions.ContainsKey(versionId);
+        public IReadOnlyDictionary<Guid, OneBitModuleVersion> ModuleVersions =>
+            new System.Collections.ObjectModel.ReadOnlyDictionary<Guid,
+                OneBitModuleVersion>(versions);
 
         public OneBitWorldSession(OneBitWorldDesign design, string frequencyHz = "10",
             IReadOnlyDictionary<Guid, OneBitModuleVersion> moduleVersions = null)

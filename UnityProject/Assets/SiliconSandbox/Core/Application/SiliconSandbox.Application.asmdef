@@ -1,7 +1,7 @@
 {
   "name": "SiliconSandbox.Application",
   "rootNamespace": "SiliconSandbox.Application",
-  "references": ["SiliconSandbox.Contracts", "SiliconSandbox.Authoring", "SiliconSandbox.Graph", "SiliconSandbox.Simulation"],
+  "references": ["SiliconSandbox.Contracts", "SiliconSandbox.Authoring", "SiliconSandbox.Graph", "SiliconSandbox.Simulation", "SiliconSandbox.Persistence"],
   "autoReferenced": false,
   "noEngineReferences": true
 }

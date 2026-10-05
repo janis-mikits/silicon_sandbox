@@ -12,6 +12,12 @@ uncompressed world/module bytes, checks listed entries and dependency closure,
 and distinguishes a damaged world record from an individually damaged or
 missing module record. Its SHA-256 implementation is checked against the
 independent published `abc` digest vector.
+The application can also capture a coherent authored save snapshot and open a
+fresh session from it. An in-memory regression changes a source and SR Q,
+captures the design with a fixed module placement and 36-slot inventory, then
+checks that identities/topology/settings remain while the source returns to
+its configured Off state, Q returns to X, time returns to zero, and the world
+clock starts stopped at 0. This is not a file round trip; JSON mapping remains.
 
 This does **not** yet serialize or strictly parse the version 1 JSON records,
 verify record identity/topology, implement atomic file replacement or backups,
@@ -24,6 +30,7 @@ Offline repository-local NUnit command executed from the repository root:
 DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet
 ```
 
-Latest result: 127 passed, 0 failed, 0 ignored. Unity Test Runner and a player build
+Latest result: 129 passed, 0 failed, 0 ignored. Play Mode source compilation
+also succeeded with zero warnings/errors. Unity Test Runner and a player build
 for this change did not run because Codex-launched Unity batch mode still
 cannot connect to the Licensing Client.
