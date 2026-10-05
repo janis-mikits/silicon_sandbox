@@ -1,0 +1,7 @@
+{
+  "name": "SiliconSandbox.Graph",
+  "rootNamespace": "SiliconSandbox.Graph",
+  "references": ["SiliconSandbox.Contracts", "SiliconSandbox.Authoring"],
+  "autoReferenced": false,
+  "noEngineReferences": true
+}

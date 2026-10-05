@@ -1,0 +1,8 @@
+{
+  "name": "SiliconSandbox.EditModeTests",
+  "rootNamespace": "SiliconSandbox.Tests.EditMode",
+  "references": ["SiliconSandbox.Contracts", "SiliconSandbox.Authoring", "SiliconSandbox.Graph", "SiliconSandbox.Simulation", "SiliconSandbox.Bootstrap", "SiliconSandbox.EditorBuild"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false
+}

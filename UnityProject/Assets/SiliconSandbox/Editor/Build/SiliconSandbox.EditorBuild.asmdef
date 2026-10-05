@@ -1,0 +1,7 @@
+{
+  "name": "SiliconSandbox.EditorBuild",
+  "rootNamespace": "SiliconSandbox.EditorBuild",
+  "references": ["SiliconSandbox.Bootstrap"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false
+}

@@ -1,0 +1,7 @@
+{
+  "name": "SiliconSandbox.Authoring",
+  "rootNamespace": "SiliconSandbox.Authoring",
+  "references": ["SiliconSandbox.Contracts"],
+  "autoReferenced": false,
+  "noEngineReferences": true
+}

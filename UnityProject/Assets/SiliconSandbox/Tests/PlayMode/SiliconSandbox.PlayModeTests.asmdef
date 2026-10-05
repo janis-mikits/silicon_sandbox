@@ -1,0 +1,8 @@
+{
+  "name": "SiliconSandbox.PlayModeTests",
+  "rootNamespace": "SiliconSandbox.Tests.PlayMode",
+  "references": ["SiliconSandbox.Contracts", "SiliconSandbox.Simulation", "SiliconSandbox.Bootstrap"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": [],
+  "autoReferenced": false
+}

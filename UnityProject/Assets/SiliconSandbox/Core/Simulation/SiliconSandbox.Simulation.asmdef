@@ -1,0 +1,7 @@
+{
+  "name": "SiliconSandbox.Simulation",
+  "rootNamespace": "SiliconSandbox.Simulation",
+  "references": ["SiliconSandbox.Contracts"],
+  "autoReferenced": false,
+  "noEngineReferences": true
+}
