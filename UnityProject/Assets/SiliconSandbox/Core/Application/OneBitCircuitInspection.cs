@@ -40,6 +40,10 @@ namespace SiliconSandbox.Application
         public OneBitInspection InspectModulePort(Guid objectId, Guid portId) =>
             Inspect(JoinMember.ModulePortBit(objectId, portId, 0));
 
+        public LogicBit InspectInternalPin(Guid instanceId, Guid componentId,
+            Guid pinId) => circuit.Net(built.NetIndex(instanceId,
+                JoinMember.ComponentPin(componentId, pinId))).Value;
+
         private OneBitInspection Inspect(JoinMember member)
         {
             var net = built.Graph.NetFor(member);

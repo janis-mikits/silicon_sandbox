@@ -2,6 +2,14 @@
 
 This log records only new game or material cross-system choices that would normally have required the user's decision. The user authorized choosing the recommended option during the extended first-playable implementation. Routine code choices are omitted; the canonical document linked for each entry governs behavior.
 
+## 5 October 2026 — One-level live module inspection for the professor milestone
+
+**Issue:** The professor's fixed SR package must expose Q_bar internally without making it a fourth output port, while the broader specification also asks for navigation into nested module instances. The current first-playable package has one level and the full nested viewer is not yet implemented.
+
+**Options:** (1) Delay internal inspection until a full hierarchical 3D viewer exists; (2) show the selected placed instance's live internal pins in a read-only scrollable panel now, retaining exact instance identity and leaving nested navigation for later module-depth work.
+
+**Recommendation adopted:** Option 2. It makes Q and Q_bar observable for each independent professor instance without changing ports, simulation, or saved definitions. The broader nested-navigation requirement remains. Recorded in [delivery](../docs/delivery-and-acceptance.md#first-playable-professor-milestone) and [controls](../docs/building-and-interface.md#default-controls).
+
 ## 5 October 2026 — First-playable Save, Load, and Publish controls
 
 **Issue:** The professor must save, quit, reopen an authored world and publish a fixed module, but the broader illustrated main menu is not yet implemented. A current-world-only Reopen button would fail after restarting because a fresh world has a different ID.

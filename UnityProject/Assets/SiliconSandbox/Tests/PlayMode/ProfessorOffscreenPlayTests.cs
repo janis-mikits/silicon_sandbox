@@ -94,6 +94,13 @@ namespace SiliconSandbox.Tests.PlayMode
             session.Scheduler.AdvanceUntil(
                 session.Scheduler.NextClockEdge.Value); // third rise
             AssertQ(session, a, b, qPort, LogicBit.Zero, LogicBit.Zero);
+            var internalSr = version.Components[0];
+            Assert.That(session.Inspector.InspectInternalPin(a.InstanceId,
+                internalSr.Id, internalSr.PinIds["Q_bar"]),
+                Is.EqualTo(LogicBit.One));
+            Assert.That(session.Inspector.InspectInternalPin(b.InstanceId,
+                internalSr.Id, internalSr.PinIds["Q_bar"]),
+                Is.EqualTo(LogicBit.One));
             controller.Teleport(new Vector3(11f, 1f, 2f));
             controller.SetViewDirection(Vector3.forward);
             yield return null;

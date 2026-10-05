@@ -62,20 +62,28 @@ namespace SiliconSandbox.Tests.EditMode
             session.AttachWorldClockPort(a.Id, clkPort);
             session.AttachWorldClockPort(b.Id, clkPort);
             AssertStates(session, a, b, qPort, LogicBit.X, LogicBit.X);
+            AssertInternalQBar(session, version, a, b,
+                LogicBit.X, LogicBit.X);
 
             session.ToggleSource(aS.Id);
             session.Scheduler.StepClockEdge(); // first rising edge
             AssertStates(session, a, b, qPort, LogicBit.One, LogicBit.X);
+            AssertInternalQBar(session, version, a, b,
+                LogicBit.Zero, LogicBit.X);
             session.ToggleSource(aS.Id);
             session.ToggleSource(bR.Id);
             session.Scheduler.StepClockEdge(); // fall; no SR sample
             session.Scheduler.StepClockEdge(); // second rising edge
             AssertStates(session, a, b, qPort, LogicBit.One, LogicBit.Zero);
+            AssertInternalQBar(session, version, a, b,
+                LogicBit.Zero, LogicBit.One);
             session.ToggleSource(aR.Id);
             session.ToggleSource(bR.Id);
             session.Scheduler.StepClockEdge(); // fall
             session.Scheduler.StepClockEdge(); // third rising edge
             AssertStates(session, a, b, qPort, LogicBit.Zero, LogicBit.Zero);
+            AssertInternalQBar(session, version, a, b,
+                LogicBit.One, LogicBit.One);
 
             var before = session.Design;
             var saved = context.Capture(new SavedPlayerPose(20, 2, 20, 0, 0, 1));
@@ -103,6 +111,8 @@ namespace SiliconSandbox.Tests.EditMode
             foreach (var source in new[] { aS, aR, bS, bR })
                 Assert.That(reopened.Session.Circuit.Source(source.Id).IsOn, Is.False);
             AssertStates(reopened.Session, a, b, qPort, LogicBit.X, LogicBit.X);
+            AssertInternalQBar(reopened.Session, version, a, b,
+                LogicBit.X, LogicBit.X);
             reopened.Session.Scheduler.StepClockEdge();
             AssertStates(reopened.Session, a, b, qPort, LogicBit.X, LogicBit.X);
         }
@@ -128,6 +138,19 @@ namespace SiliconSandbox.Tests.EditMode
                 Is.EqualTo(expectedA));
             Assert.That(session.Inspector.InspectModulePort(b.Id, qPort).Value,
                 Is.EqualTo(expectedB));
+        }
+
+        private static void AssertInternalQBar(OneBitWorldSession session,
+            OneBitModuleVersion version, PlacedOneBitModuleInstance a,
+            PlacedOneBitModuleInstance b, LogicBit expectedA,
+            LogicBit expectedB)
+        {
+            var component = version.Components[0];
+            var pin = component.PinIds["Q_bar"];
+            Assert.That(session.Inspector.InspectInternalPin(
+                a.InstanceId, component.Id, pin), Is.EqualTo(expectedA));
+            Assert.That(session.Inspector.InspectInternalPin(
+                b.InstanceId, component.Id, pin), Is.EqualTo(expectedB));
         }
     }
 }

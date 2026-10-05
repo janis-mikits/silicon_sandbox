@@ -58,6 +58,7 @@ namespace SiliconSandbox.Interaction
             Array.Empty<WorldRecoveryChoice>();
         private bool browseWorlds;
         private Vector2 savedWorldScroll;
+        private Vector2 internalInspectScroll;
         private string persistenceMessage = "";
         private bool hudVisible = true;
         private Guid configureSourceId;
@@ -1477,6 +1478,11 @@ namespace SiliconSandbox.Interaction
 
         private void DrawInspect()
         {
+            if (inspectedKind == WorldPartKind.ModuleBody)
+            {
+                DrawModuleInternalInspect();
+                return;
+            }
             OneBitInspection detail;
             try
             {
@@ -1499,6 +1505,46 @@ namespace SiliconSandbox.Interaction
                 "Connections: " + string.Join(", ", names) + "\n" +
                 "Active drivers: " + detail.ActiveDrivers.Count + "\n" +
                 detail.Explanation);
+        }
+
+        private void DrawModuleInternalInspect()
+        {
+            PlacedOneBitModuleInstance instance = null;
+            foreach (var item in session.Design.Modules)
+                if (item.Id == inspectedOwner) { instance = item; break; }
+            if (instance == null) { inspectOpen = false; return; }
+            var area = new Rect(12f, 150f, 550f, 305f);
+            if (!session.ModuleVersions.TryGetValue(instance.VersionId,
+                out var version))
+            {
+                GUI.Box(area, instance.InstanceName + " — exact module missing\n" +
+                    "Exterior ports and connections remain as a placeholder.");
+                return;
+            }
+            GUI.Box(area, "Inside " + instance.InstanceName + "  version " +
+                instance.VersionId.ToString("D").Substring(0, 8));
+            var lines = new List<string>();
+            foreach (var component in version.Components)
+            {
+                var pins = new List<string>();
+                foreach (var pair in component.PinIds)
+                    pins.Add(pair.Key + "=" + session.Inspector.InspectInternalPin(
+                        instance.InstanceId, component.Id, pair.Value).ToSymbol());
+                pins.Sort(StringComparer.Ordinal);
+                lines.Add(component.TypeId + "  local (" +
+                    component.AnchorCell.X + "," + component.AnchorCell.Y +
+                    "," + component.AnchorCell.Z + ")  " +
+                    string.Join("  ", pins));
+            }
+            var scrollArea = new Rect(area.x + 12f, area.y + 32f,
+                area.width - 24f, area.height - 44f);
+            var content = new Rect(0f, 0f, scrollArea.width - 20f,
+                Mathf.Max(scrollArea.height, lines.Count * 28f));
+            internalInspectScroll = GUI.BeginScrollView(scrollArea,
+                internalInspectScroll, content);
+            for (var i = 0; i < lines.Count; i++)
+                GUI.Label(new Rect(0f, i * 28f, content.width, 26f), lines[i]);
+            GUI.EndScrollView();
         }
 
         private string PinName(JoinMember pin)

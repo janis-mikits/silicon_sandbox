@@ -79,7 +79,7 @@ Menu button placement, ordering, and style must be easy to change without breaki
 | Shift while flying | Descend |
 | Shift plus right click | Momentary concatenate modifier during connector placement |
 | C | Configure targeted component |
-| I | Inspect targeted connector pin or component |
+| I | Inspect targeted connector or pin; on a module body, inspect that placed instance's live internal pins |
 | U | Undo construction edit |
 | J | Redo construction edit |
 | Z / X | Preview clockwise / counterclockwise vertical-axis rotation of the targeted placed component or module; confirmation follows Section 3 |
