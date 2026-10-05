@@ -59,3 +59,23 @@ The first command passed **192 Edit Mode, 16 Play Mode, macOS build, startup, sa
 All cases used 1920×1080 Standard with 10-second warm-up and at least 60 seconds measured. All four Mac FPS and p99 criteria passed; all required active edges were processed. The isolated 87.161 ms maximum in idle/stationary is recorded as a visible outlier even though its p99 is 4.994 ms. Eight place/break/undo operations across actual x=16 and x=32 region lines took 21–46 ms; manual save took 172 ms and load through the first rendered frame 299 ms. The largest reserved-memory reading was 188 MiB. The report records per-case main-thread and GPU means, the exact quality options, hardware, activity, structural counts, and visible-object counts.
 
 This is a **Mac numerical performance pass** on the measured M4. It does not establish Windows performance, a representative ordinary Steam PC, a manual visual professor demonstration, sparse/dense renderer-shape comparisons, or a running CI job. Those remain open; Windows is temporarily waived by the user.
+
+## Supplementary shape views on the same reference, 5 October 2026
+
+The later benchmark run retained the same archived world and SHA-256, four acceptance cameras/activity cases, Standard preset, 1920×1080, and strict numerical thresholds. Two additional stationary views measured separate regions of that same world with the clock stopped: sparse standalone gates from `(8, 0.3, 55)` facing south, and ten repeated opaque module bodies from `(100, 0.3, 31)` facing east. Each used five seconds of warm-up and at least 20 seconds of samples. `scripts/check-benchmark-report.py` now requires both views and checks their FPS and p99 values without changing the four primary acceptance gates.
+
+Commands:
+
+```sh
+scripts/verify-unity.sh --editor '/Applications/Unity/Hub/Editor/6000.3.24f1/Unity.app/Contents/MacOS/Unity' --target StandaloneOSX
+scripts/benchmark-mac.sh
+```
+
+Result: **192 Edit Mode passed, 17 Play Mode passed, macOS build, player startup, save/reopen and exit-autosave passed**. The benchmark printed `Strict Mac numerical frame, shape, clock, edit, save and load gates passed.` The ignored full report is `UnityProject/Logs/Verification/benchmark-mac-reference-20261005T182117Z.txt`.
+
+| View | Average FPS | p99 ms | Visible renderers | Main/GPU mean ms |
+| --- | ---: | ---: | ---: | ---: |
+| Sparse standalone gates | 331.223 | 3.199 | 3,632 | 3.005 / 2.283 |
+| Repeated module bodies | 1,356.005 | 0.861 | 323 | 0.737 / 0.451 |
+
+The four primary cases also passed: idle/stationary 241.685 FPS, active/stationary 205.986, idle/flying 759.712, active/flying 684.395; p99 was 4.727–6.913 ms and both active runs processed all 1,200 expected edges. All eight boundary edits took 20–47 ms, save 175 ms, and load through the next frame 302 ms. Largest reserved-memory reading was 188 MiB. The module view has fewer visible renderers, so its higher FPS is a scene-shape observation, **not** a claim that module presentation is intrinsically faster per object. A dedicated densely packed opaque-block scene and a manual visual comparison have not been measured. Windows and CI remain unrun.

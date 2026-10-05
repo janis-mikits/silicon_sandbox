@@ -155,6 +155,17 @@ namespace SiliconSandbox.Bootstrap
             yield return RunCase("active/stationary", true, false);
             yield return RunCase("idle/flying", false, true);
             yield return RunCase("active/flying", true, true);
+            report.AppendLine("Supplementary shape views use the same frozen" +
+                " world, 1080p Standard preset and stopped clock; they compare" +
+                " sparse standalone gates with the repeated opaque module bodies.");
+            report.AppendLine("Shape cameras: sparse (8,0.3,55) facing south;" +
+                " repeated modules (100,0.3,31) facing east.");
+            yield return RunCase("sparse-standalone", false, false,
+                new Vector3(8f, 0.3f, 55f), Vector3.back, 5d, 20d,
+                "SHAPE");
+            yield return RunCase("repeated-modules", false, false,
+                new Vector3(100f, 0.3f, 31f), Vector3.right, 5d, 20d,
+                "SHAPE");
             yield return RunOperations();
             Finish("REFERENCE MEASUREMENT COMPLETE", 0);
         }
@@ -179,7 +190,12 @@ namespace SiliconSandbox.Bootstrap
             }
         }
 
-        private IEnumerator RunCase(string name, bool active, bool flying)
+        private IEnumerator RunCase(string name, bool active, bool flying,
+            Vector3? stationaryPosition = null,
+            Vector3? stationaryLook = null,
+            double warmupSeconds = WarmupSeconds,
+            double measureSeconds = MeasureSeconds,
+            string reportPrefix = "CASE")
         {
             session.Scheduler.ResetSimulation();
             if (active) session.Scheduler.StartClock();
@@ -205,8 +221,9 @@ namespace SiliconSandbox.Bootstrap
                 if (frameSeconds <= 0d) continue;
                 AdvanceSimulation(frameSeconds);
                 SetCamera(flying, Math.Max(0d,
-                    (elapsed - WarmupSeconds) / MeasureSeconds));
-                if (!sampling && elapsed >= WarmupSeconds)
+                    (elapsed - warmupSeconds) / measureSeconds),
+                    stationaryPosition, stationaryLook);
+                if (!sampling && elapsed >= warmupSeconds)
                 {
                     sampling = true;
                     visibleAtStart = CountVisibleRenderers();
@@ -226,15 +243,16 @@ namespace SiliconSandbox.Bootstrap
                     if (timing[0].gpuFrameTime > 0d)
                         gpuMs.Add(timing[0].gpuFrameTime);
                 }
-                if (now - measuredStart >= MeasureSeconds) break;
+                if (now - measuredStart >= measureSeconds) break;
             }
             session.Scheduler.StopClock();
             var seconds = last - measuredStart;
             var visibleAtEnd = CountVisibleRenderers();
             var metrics = new FirstPlayableFrameMetrics(samples, seconds);
             var edges = session.Scheduler.ClockEdgesProcessed - startingEdges;
-            report.AppendLine("CASE=" + name +
-                " warmup=10s measured=" + F(seconds) + "s" +
+            report.AppendLine(reportPrefix + "=" + name +
+                " warmup=" + F(warmupSeconds) + "s measured=" +
+                F(seconds) + "s" +
                 " frames=" + metrics.FrameCount +
                 " average FPS=" + F(metrics.AverageFramesPerSecond) +
                 " median ms=" + F(metrics.MedianMilliseconds) +
@@ -344,15 +362,17 @@ namespace SiliconSandbox.Bootstrap
             simulationTicks += Stopwatch.GetTimestamp() - start;
         }
 
-        private void SetCamera(bool flying, double progress)
+        private void SetCamera(bool flying, double progress,
+            Vector3? stationaryPosition, Vector3? stationaryLook)
         {
             var t = flying ? Mathf.Clamp01((float)progress) : 0f;
             var position = flying
                 ? Vector3.Lerp(new Vector3(8f, 0.3f, 5f),
                     new Vector3(100f, 0.3f, 60f), t)
-                : new Vector3(30f, 0.3f, 12f);
+                : stationaryPosition ?? new Vector3(30f, 0.3f, 12f);
             player.position = position;
-            var look = flying ? new Vector3(12f, 0f, 7f) : Vector3.right;
+            var look = flying ? new Vector3(12f, 0f, 7f) :
+                stationaryLook ?? Vector3.right;
             view.transform.rotation = Quaternion.LookRotation(look);
         }
 
