@@ -29,15 +29,47 @@ namespace SiliconSandbox.Simulation
             previousClock = LogicBit.Zero;
         }
 
+        internal OneBitSrFlipFlop CopyWithInitialQ(LogicBit? authoredInitialQ)
+        {
+            var copy = new OneBitSrFlipFlop(authoredInitialQ);
+            copy.Q = Q;
+            copy.previousClock = previousClock;
+            return copy;
+        }
+
+        internal void InitializeClockBaseline(LogicBit settledClock)
+        {
+            if (settledClock > LogicBit.Z)
+                throw new ArgumentOutOfRangeException(nameof(settledClock));
+            previousClock = settledClock;
+        }
+
         // Returns whether the transition caused an edge sample.
         public bool AdvanceClock(LogicBit currentClock, LogicBit s, LogicBit r)
+        {
+            var sample = PreviewClock(currentClock, s, r, out var nextQ);
+            CommitClock(currentClock, nextQ);
+            return sample;
+        }
+
+        // Preview all storage components before any output update. The world
+        // simulator commits previews together, then propagates their outputs.
+        public bool PreviewClock(LogicBit currentClock, LogicBit s, LogicBit r,
+            out LogicBit nextQ)
         {
             if (currentClock > LogicBit.Z || s > LogicBit.Z || r > LogicBit.Z)
                 throw new ArgumentOutOfRangeException();
             var sample = FourStateClockEdges.IsPositiveEdge(previousClock, currentClock);
-            previousClock = currentClock;
-            if (sample) Q = NextState(Q, s, r);
+            nextQ = sample ? NextState(Q, s, r) : Q;
             return sample;
+        }
+
+        public void CommitClock(LogicBit currentClock, LogicBit nextQ)
+        {
+            if (currentClock > LogicBit.Z || nextQ > LogicBit.Z)
+                throw new ArgumentOutOfRangeException();
+            previousClock = currentClock;
+            Q = nextQ;
         }
 
         public static LogicBit NextState(LogicBit priorQ, LogicBit s, LogicBit r)

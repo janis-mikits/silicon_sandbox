@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SiliconSandbox.Contracts;
 
 namespace SiliconSandbox.Authoring
 {
@@ -11,9 +12,10 @@ namespace SiliconSandbox.Authoring
         public string TypeId { get; }
         public int TypeVersion { get; }
         public IReadOnlyDictionary<string, Guid> PinIds { get; }
+        public LogicBit? InitialQ { get; }
 
         public OneBitComponent(Guid id, string typeId, int typeVersion,
-            IReadOnlyDictionary<string, Guid> pinIds)
+            IReadOnlyDictionary<string, Guid> pinIds, LogicBit? initialQ = null)
         {
             if (id == Guid.Empty || typeId == null || pinIds == null)
                 throw new ArgumentException("Invalid component identity or pins.");
@@ -21,6 +23,10 @@ namespace SiliconSandbox.Authoring
             TypeId = typeId;
             TypeVersion = typeVersion;
             PinIds = new Dictionary<string, Guid>(pinIds);
+            if (initialQ.HasValue && (typeId != BuiltInPinCatalog.SrFlipFlop ||
+                initialQ.Value > LogicBit.Z))
+                throw new ArgumentException("Only an SR flip-flop may configure initial Q.");
+            InitialQ = initialQ;
         }
 
         public Guid Pin(string key) => PinIds[key];

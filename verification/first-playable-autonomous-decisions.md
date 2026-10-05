@@ -25,3 +25,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Always round ties upward; (2) round ties to the even picosecond.
 
 **Recommendation adopted:** Option 2 avoids a systematic upward bias while remaining deterministic. Every edge is still rounded from its absolute rational time, so interval rounding cannot accumulate drift. Recorded in [circuit time](../docs/circuit-time-and-clock.md#first-playable-scheduler-contract).
+
+## 5 October 2026 — Initial CLK value versus a live clock transition
+
+**Issue:** An unconnected SR CLK pin initially resolves to Z. Treating initialization as a live 0→Z transition would sample the flip-flop and could overwrite its authored initial Q before the player runs the circuit.
+
+**Options:** (1) Treat initial net resolution as an edge; (2) settle initial nets and establish each component's previous CLK value without sampling.
+
+**Recommendation adopted:** Option 2 preserves authored initialization and leaves the accepted 0→Z positive-edge rule intact for later live transitions. It applies to new world, reopen, and Reset Simulation. Recorded in [circuit time](../docs/circuit-time-and-clock.md#clock-and-event-model).

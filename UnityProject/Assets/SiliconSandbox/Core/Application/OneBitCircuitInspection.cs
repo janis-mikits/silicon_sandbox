@@ -48,27 +48,29 @@ namespace SiliconSandbox.Application
             var drivers = new List<InspectedDriver>();
             foreach (var component in components)
             {
-                LogicBit drive;
-                string key;
                 if (component.TypeId == BuiltInPinCatalog.Source)
-                {
-                    key = "OUT";
-                    drive = circuit.Source(component.Id).Drive;
-                }
+                    AddDriver(component, "OUT", circuit.Source(component.Id).Drive);
                 else if (component.TypeId == BuiltInPinCatalog.And)
                 {
-                    key = "Y";
                     var a = circuit.Net(built.NetIndex(Pin(component, "A"))).Value;
                     var b = circuit.Net(built.NetIndex(Pin(component, "B"))).Value;
-                    drive = OneBitLogic.And(a, b);
+                    AddDriver(component, "Y", OneBitLogic.And(a, b));
                 }
-                else continue;
+                else if (component.TypeId == BuiltInPinCatalog.SrFlipFlop)
+                {
+                    AddDriver(component, "Q", circuit.Storage(component.Id).Q);
+                    AddDriver(component, "Q_bar", circuit.Storage(component.Id).QBar);
+                }
+            }
+            return new OneBitInspection(resolved, net.Tag, pins, net.ConnectorIds,
+                drivers, Explain(netIndex, resolved));
+
+            void AddDriver(OneBitComponent component, string key, LogicBit drive)
+            {
                 var pin = Pin(component, key);
                 if (drive != LogicBit.Z && pins.Contains(pin))
                     drivers.Add(new InspectedDriver(pin, drive));
             }
-            return new OneBitInspection(resolved, net.Tag, pins, net.ConnectorIds,
-                drivers, Explain(netIndex, resolved));
         }
 
         private string Explain(int netIndex, ResolvedBit resolved)

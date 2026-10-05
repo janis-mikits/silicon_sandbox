@@ -37,6 +37,7 @@ namespace SiliconSandbox.Graph
             var objectIds = new HashSet<Guid>();
             var sources = new List<SourceBinding>();
             var gates = new List<AndBinding>();
+            var storage = new List<SrBinding>();
             foreach (var component in components)
             {
                 if (component == null || !objectIds.Add(component.Id))
@@ -56,6 +57,10 @@ namespace SiliconSandbox.Graph
                     sources.Add(new SourceBinding(component.Id, Index("OUT")));
                 else if (component.TypeId == BuiltInPinCatalog.And)
                     gates.Add(new AndBinding(component.Id, Index("A"), Index("B"), Index("Y")));
+                else if (component.TypeId == BuiltInPinCatalog.SrFlipFlop)
+                    storage.Add(new SrBinding(component.Id, Index("S"), Index("R"),
+                        Index("CLK"), Index("Q"), Index("Q_bar"),
+                        component.Pin("Q"), component.Pin("Q_bar"), component.InitialQ));
                 else
                     throw new ArgumentException("This execution plan does not yet support this component type.");
 
@@ -64,7 +69,7 @@ namespace SiliconSandbox.Graph
             if (consumedPins.Count != authoredPins.Count)
                 throw new ArgumentException("Topology contains an unowned component pin.");
             return new BuiltOneBitCircuitPlan(graph,
-                new OneBitCircuitPlan(graph.Nets.Count, sources, gates), indexes);
+                new OneBitCircuitPlan(graph.Nets.Count, sources, gates, storage), indexes);
         }
     }
 }
