@@ -97,5 +97,40 @@ namespace SiliconSandbox.Tests.EditMode
             Assert.That(session.Revision, Is.EqualTo(revision));
             Assert.That(session.Design.Components[0].TypeId, Is.EqualTo(BuiltInPinCatalog.And));
         }
+
+        [Test]
+        public void SourceBodyActionSettlesWhileClockStoppedWithoutEditingDesign()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(
+                new WorldBounds(20, 20, 10)));
+            session.PlaceComponent(BuiltInPinCatalog.Source, new GridCell(2, 1, 2),
+                GridOrientation.Default, LogicBit.One, false);
+            var source = session.Design.Components[0];
+            var output = JoinMember.ComponentPin(source.Id, source.PinIds["OUT"]);
+            var before = session.Design;
+            var revision = session.Revision;
+            Assert.That(session.Scheduler.IsPaused, Is.True);
+            Assert.That(session.Scheduler.ClockRunning, Is.False);
+
+            session.ToggleSource(source.Id);
+            Assert.That(session.Circuit.Source(source.Id).IsOn, Is.True);
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(output)).Value,
+                Is.EqualTo(LogicBit.One));
+            Assert.That(session.Design, Is.SameAs(before));
+            Assert.That(session.Revision, Is.EqualTo(revision));
+            Assert.That(session.Scheduler.Now, Is.EqualTo(SiliconSandbox.Simulation.SimulationTime.Zero));
+
+            session.ToggleSource(source.Id);
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(output)).Value,
+                Is.EqualTo(LogicBit.Zero));
+            Assert.That(session.Design.Components[0].SourceInitialOn, Is.False);
+
+            session.Scheduler.ResumeSimulation();
+            session.ToggleSource(source.Id);
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(output)).Value,
+                Is.EqualTo(LogicBit.One));
+            Assert.That(session.Scheduler.Now, Is.EqualTo(SiliconSandbox.Simulation.SimulationTime.Zero));
+            Assert.That(session.Revision, Is.EqualTo(revision));
+        }
     }
 }

@@ -70,6 +70,21 @@ namespace SiliconSandbox.Application
             Revision = nextRevision;
         }
 
+        public void ToggleSource(Guid sourceId)
+        {
+            var nextOn = !Circuit.Source(sourceId).IsOn;
+            if (Scheduler.IsPaused)
+            {
+                Circuit.SetSourceOn(sourceId, nextOn);
+                Circuit.AdvanceToSettled();
+            }
+            else
+            {
+                Scheduler.QueueSourceChange(sourceId, nextOn, Scheduler.Now);
+                Scheduler.AdvanceUntil(Scheduler.Now);
+            }
+        }
+
         private void SafePause()
         {
             if (!Scheduler.IsPaused) Scheduler.AdvanceUntil(Scheduler.Now);

@@ -63,3 +63,9 @@ The Editor again stalled at Licensing Client channel initialization after
 assembly reload. I interrupted the stalled wrapper (exit 130). This attempt
 did not run Edit Mode tests, Play Mode tests, or a build and supplies no Unity
 pass claim for the newer code.
+
+The source-body action now toggles only live state. Its NUnit case expects
+settled output 1 then 0 during a safe pause, and 1 again after resuming
+simulation while the world clock remains stopped. Authored design, revision,
+and simulated time remain unchanged. The offline command above exited 0 with
+`PASS: live source toggles while paused or running with clock stopped`.

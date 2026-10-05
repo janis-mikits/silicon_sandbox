@@ -65,3 +65,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Apply the new initial state immediately; (2) preserve the current runtime On/Off choice and use the new initial state only on load or Reset Simulation.
 
 **Recommendation adopted:** Option 2 keeps the meaning of “initial” consistent with save/reopen and avoids a surprise live toggle during configuration. A new configured On value still changes the present drive when the source is On. Recorded in [components and timing](../docs/components-and-rtl-timing.md#sources-on-load-and-reset).
+
+## 5 October 2026 — Source action during a settled simulation pause
+
+**Issue:** Structural edits leave simulation safely paused, but the accepted rules do not specify whether a right-click on a source during that pause changes its present value.
+
+**Options:** (1) Defer the action until Resume; (2) settle its combinational effect immediately at the current simulated time without stepping the clock.
+
+**Recommendation adopted:** Option 2 keeps the source usable immediately after placement and does not invent a clock edge. The authored initial state is unaffected. Recorded in [circuit time](../docs/circuit-time-and-clock.md#safe-pause-and-editing).
