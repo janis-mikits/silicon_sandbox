@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using SiliconSandbox.Application;
@@ -10,6 +11,14 @@ using UnityEngine;
 
 namespace SiliconSandbox.Interaction
 {
+    public sealed class SavedWorldChoice
+    {
+        public Guid WorldId { get; }
+        public string WorldName { get; }
+        public SavedWorldChoice(Guid worldId, string worldName)
+        { WorldId = worldId; WorldName = worldName; }
+    }
+
     // First playable interaction shell. Every authored action goes through
     // OneBitWorldSession; ray hits supply IDs but never imply a connection.
     public sealed class OneBitWorldInteraction : MonoBehaviour
@@ -48,6 +57,16 @@ namespace SiliconSandbox.Interaction
         private bool configureOpen;
         private bool inspectOpen;
         private bool pauseMenuOpen;
+        private Func<string> saveWorld;
+        private Func<string> reopenWorld;
+        private Func<OneBitPackageDraft, string> publishPackage;
+        private Func<IReadOnlyList<SavedWorldChoice>> listSavedWorlds;
+        private Func<Guid, string> loadSavedWorld;
+        private IReadOnlyList<SavedWorldChoice> savedWorldChoices =
+            Array.Empty<SavedWorldChoice>();
+        private bool browseWorlds;
+        private Vector2 savedWorldScroll;
+        private string persistenceMessage = "";
         private bool hudVisible = true;
         private Guid configureSourceId;
         private LogicBit configureValue;
@@ -86,6 +105,7 @@ namespace SiliconSandbox.Interaction
             configureOpen = false;
             inspectOpen = false;
             pauseMenuOpen = false;
+            browseWorlds = false;
             observedRevision = ulong.MaxValue;
             fractionalPicoseconds = 0d;
             HideGhost();
@@ -96,6 +116,18 @@ namespace SiliconSandbox.Interaction
             if (viewCamera == null) throw new ArgumentException("Player camera is missing.");
             frequencyText = session.Scheduler.FrequencyHz;
             player.SetInterfaceOpen(false);
+        }
+
+        public void SetPersistenceActions(Func<string> save, Func<string> reopen,
+            Func<OneBitPackageDraft, string> publish,
+            Func<IReadOnlyList<SavedWorldChoice>> list,
+            Func<Guid, string> load)
+        {
+            saveWorld = save ?? throw new ArgumentNullException(nameof(save));
+            reopenWorld = reopen ?? throw new ArgumentNullException(nameof(reopen));
+            publishPackage = publish ?? throw new ArgumentNullException(nameof(publish));
+            listSavedWorlds = list ?? throw new ArgumentNullException(nameof(list));
+            loadSavedWorld = load ?? throw new ArgumentNullException(nameof(load));
         }
 
         private void Update()
@@ -1024,6 +1056,9 @@ namespace SiliconSandbox.Interaction
                 GUI.Label(new Rect(12f, 62f, 400f, 28f),
                         "Wire start selected. Aim at a pin, node, or floor cell.");
                 QuickLook();
+                if (persistenceMessage.Length > 0)
+                    GUI.Box(new Rect(12f, Screen.height - 112f, 600f, 42f),
+                        persistenceMessage);
             }
             if (rotationPreview != null)
                 GUI.Box(new Rect(Screen.width * 0.5f - 230f, 20f, 460f, 52f),
@@ -1205,6 +1240,22 @@ namespace SiliconSandbox.Interaction
                 catch (ArgumentException exception)
                 { packageError = exception.Message; }
             }
+            if (GUI.Button(new Rect(rect.x + 380f, rect.y + 643f,
+                180f, 35f), "Publish module"))
+            {
+                try
+                {
+                    persistenceMessage = publishPackage == null
+                        ? "Package storage is unavailable."
+                        : publishPackage(packageDraft);
+                    packageDraft = null;
+                    player.SetInterfaceOpen(false);
+                }
+                catch (Exception error) when (error is IOException ||
+                    error is ArgumentException || error is InvalidOperationException ||
+                    error is UnauthorizedAccessException)
+                { packageError = error.Message; }
+            }
             if (GUI.Button(new Rect(rect.x + 740f, rect.y + 643f,
                 180f, 35f), "Close"))
             {
@@ -1342,7 +1393,7 @@ namespace SiliconSandbox.Interaction
         private void DrawPauseMenu()
         {
             var rect = new Rect(Screen.width * 0.5f - 190f,
-                Screen.height * 0.5f - 145f, 380f, 290f);
+                Screen.height * 0.5f - 285f, 380f, 570f);
             GUI.Box(rect, "Simulation paused");
             GUI.Label(new Rect(rect.x + 20f, rect.y + 45f, 140f, 28f),
                 "World clock Hz:");
@@ -1367,13 +1418,68 @@ namespace SiliconSandbox.Interaction
             GUI.Label(new Rect(rect.x + 20f, rect.y + 184f, 340f, 28f),
                 "Settled time " + session.Scheduler.Now +
                 "   CLK " + session.Scheduler.ClockLevel.ToSymbol());
-            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 230f, 170f, 40f),
+            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 222f, 155f, 34f),
+                "Save World"))
+                RunPersistence(saveWorld);
+            if (GUI.Button(new Rect(rect.x + 195f, rect.y + 222f, 155f, 34f),
+                "Reopen Saved"))
+                RunPersistence(reopenWorld);
+            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 266f, 170f, 32f),
+                "Browse saved worlds"))
+            {
+                try
+                {
+                    savedWorldChoices = listSavedWorlds();
+                    browseWorlds = true;
+                }
+                catch (Exception error) when (error is IOException ||
+                    error is ArgumentException || error is UnauthorizedAccessException)
+                { persistenceMessage = error.Message; }
+            }
+            if (browseWorlds)
+            {
+                var area = new Rect(rect.x + 20f, rect.y + 310f, 340f, 150f);
+                var content = new Rect(0f, 0f, 315f,
+                    Mathf.Max(150f, savedWorldChoices.Count * 34f));
+                savedWorldScroll = GUI.BeginScrollView(area, savedWorldScroll, content);
+                for (var i = 0; i < savedWorldChoices.Count; i++)
+                {
+                    var choice = savedWorldChoices[i];
+                    if (GUI.Button(new Rect(0f, i * 34f, 310f, 30f),
+                        choice.WorldName + "  " + choice.WorldId.ToString("D").Substring(0, 8)))
+                    {
+                        try { persistenceMessage = loadSavedWorld(choice.WorldId); }
+                        catch (Exception error) when (error is IOException ||
+                            error is ArgumentException ||
+                            error is InvalidOperationException ||
+                            error is UnauthorizedAccessException)
+                        { persistenceMessage = error.Message; }
+                    }
+                }
+                GUI.EndScrollView();
+            }
+            GUI.Label(new Rect(rect.x + 20f, rect.y + 470f, 340f, 42f),
+                persistenceMessage);
+            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 515f, 170f, 40f),
                 "Resume"))
             {
                 session.Scheduler.ResumeSimulation();
                 pauseMenuOpen = false;
                 player.SetInterfaceOpen(false);
             }
+        }
+
+        private void RunPersistence(Func<string> command)
+        {
+            try
+            {
+                persistenceMessage = command == null
+                    ? "Save controls are unavailable." : command();
+            }
+            catch (Exception error) when (error is IOException ||
+                error is ArgumentException || error is InvalidOperationException ||
+                error is UnauthorizedAccessException)
+            { persistenceMessage = error.Message; }
         }
 
         private void DrawInspect()

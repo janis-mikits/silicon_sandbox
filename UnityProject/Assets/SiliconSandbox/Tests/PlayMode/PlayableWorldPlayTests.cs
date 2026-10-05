@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using SiliconSandbox.Application;
 using NUnit.Framework;
 using SiliconSandbox.Authoring;
@@ -14,6 +15,100 @@ namespace SiliconSandbox.Tests.PlayMode
 {
     public sealed class PlayableWorldPlayTests
     {
+        [UnityTest]
+        public IEnumerator SaveAndReopenRealWorldFileRestartsOrdinarySimulation()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            var testRoot = Environment.GetEnvironmentVariable(
+                "SILICON_SANDBOX_TEST_ROOT");
+            Assert.That(testRoot, Is.Not.Null.And.Not.Empty);
+            var storage = Path.Combine(testRoot,
+                "playmode-world-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(storage);
+            bootstrap.SetStorageRootForVerification(storage);
+            bootstrap.Session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(6, 1, 6), GridOrientation.Default,
+                LogicBit.One, false);
+            var source = bootstrap.Session.Design.Components[0];
+            bootstrap.Session.ToggleSource(source.Id);
+            bootstrap.Inventory.SelectHotbar(3);
+            var worldId = bootstrap.Context.WorldId;
+            var status = bootstrap.SaveCurrentWorldFile();
+            Assert.That(status, Does.Contain("saved"));
+            var path = Path.Combine(storage, "worlds",
+                worldId.ToString("D") + ".ssworld");
+            Assert.That(File.Exists(path), Is.True);
+            Assert.That(new FileInfo(path).Length, Is.GreaterThan(0));
+            Assert.That(bootstrap.Session.Circuit.Source(source.Id).IsOn, Is.True);
+            var reopened = bootstrap.ReopenCurrentWorldFile();
+            Assert.That(reopened, Does.Contain("reopened"));
+            Assert.That(bootstrap.Session.Scheduler.Now,
+                Is.EqualTo(SiliconSandbox.Simulation.SimulationTime.Zero));
+            Assert.That(bootstrap.Session.Design.Components[0].Id,
+                Is.EqualTo(source.Id));
+            Assert.That(bootstrap.Session.Circuit.Source(source.Id).IsOn, Is.False);
+            Assert.That(bootstrap.Inventory.SelectedHotbarSlot, Is.EqualTo(3));
+            Assert.That(bootstrap.Session.Scheduler.ClockLevel, Is.EqualTo(LogicBit.Zero));
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            bootstrap.SetStorageRootForVerification(storage);
+            Assert.That(bootstrap.ListSavedWorlds().Count, Is.EqualTo(1));
+            Assert.That(bootstrap.ListSavedWorlds()[0].WorldId, Is.EqualTo(worldId));
+            bootstrap.OpenWorldFile(worldId);
+            Assert.That(bootstrap.Session.Design.Components[0].Id,
+                Is.EqualTo(source.Id));
+            Assert.That(bootstrap.Session.Circuit.Source(source.Id).IsOn, Is.False);
+            Directory.Delete(storage, true);
+        }
+
+        [UnityTest]
+        public IEnumerator PublishedPackageSurvivesLibraryWorldAndInstanceReopen()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            var testRoot = Environment.GetEnvironmentVariable(
+                "SILICON_SANDBOX_TEST_ROOT");
+            Assert.That(testRoot, Is.Not.Null.And.Not.Empty);
+            var storage = Path.Combine(testRoot,
+                "playmode-package-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(storage);
+            bootstrap.SetStorageRootForVerification(storage);
+            bootstrap.Session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(6, 1, 6), GridOrientation.Default);
+            var draft = bootstrap.Session.PreviewPackage(new CellRegion(
+                new GridCell(6, 1, 6), new GridCell(6, 1, 6)), "Source");
+            var result = bootstrap.PublishPackage(draft);
+            Assert.That(result, Does.Contain("Published module"));
+            var slot = bootstrap.Inventory.Slots[5];
+            Assert.That(slot.Kind, Is.EqualTo(
+                SiliconSandbox.Persistence.SavedInventoryKind.ModuleVersion));
+            Assert.That(File.Exists(Path.Combine(storage, "library", "versions",
+                slot.VersionId.ToString("D") + ".json")), Is.True);
+            Assert.That(File.Exists(Path.Combine(storage, "library",
+                "library-index.json")), Is.True);
+            var version = bootstrap.Session.ModuleVersions[slot.VersionId];
+            bootstrap.Session.PlaceModule(version, "Second source",
+                new GridCell(12, 1, 6), GridOrientation.Default);
+            var instanceId = bootstrap.Session.Design.Modules[0].InstanceId;
+            bootstrap.SaveCurrentWorldFile();
+            bootstrap.ReopenCurrentWorldFile();
+            Assert.That(bootstrap.Session.Design.Modules.Count, Is.EqualTo(1));
+            Assert.That(bootstrap.Session.Design.Modules[0].InstanceId,
+                Is.EqualTo(instanceId));
+            Assert.That(bootstrap.Session.ModuleVersions.ContainsKey(slot.VersionId),
+                Is.True);
+            Assert.That(bootstrap.Inventory.Slots[5].VersionId,
+                Is.EqualTo(slot.VersionId));
+            Directory.Delete(storage, true);
+        }
+
         [UnityTest]
         public IEnumerator OpenAndOutputWireHasSelectableVisibleEnd()
         {

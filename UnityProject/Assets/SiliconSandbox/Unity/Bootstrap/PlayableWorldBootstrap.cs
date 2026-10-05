@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Interaction;
@@ -22,6 +23,17 @@ namespace SiliconSandbox.Bootstrap
         private Transform playerTransform;
         private Camera playerCamera;
         private CreativeCameraController controller;
+        private string storageRootOverride;
+
+        public void SetStorageRootForVerification(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+                throw new ArgumentException("Verification storage root must exist.");
+            storageRootOverride = Path.GetFullPath(root);
+        }
+
+        private string StorageRoot => storageRootOverride ??
+            UnityEngine.Application.persistentDataPath;
 
         private void Start()
         {
@@ -54,6 +66,9 @@ namespace SiliconSandbox.Bootstrap
             controller.SetWorldBounds(Session.Design.Bounds);
             Interaction = playerObject.AddComponent<OneBitWorldInteraction>();
             Interaction.Attach(Session, controller, Inventory);
+            Interaction.SetPersistenceActions(SaveCurrentWorldFile,
+                ReopenCurrentWorldFile, PublishPackage, ListSavedWorlds,
+                OpenWorldFile);
 
             var output = Environment.GetEnvironmentVariable(SmokeOutputVariable);
             if (!string.IsNullOrEmpty(output))
@@ -99,6 +114,156 @@ namespace SiliconSandbox.Bootstrap
                 (float)saved.Player.LookZ).normalized);
             WorldView.Attach(Session);
             Interaction.Attach(Session, controller, Inventory);
+        }
+
+        public string SaveCurrentWorldFile()
+        {
+            var saved = CaptureCurrentWorld();
+            var root = StorageRoot;
+            Directory.CreateDirectory(Path.Combine(root, "worlds"));
+            var path = ModuleLibraryStore.WorldPath(root, saved.WorldId);
+            var archive = WorldV1ArchiveCodec.Write(saved);
+            VerifiedWorldFileStore.Save(path, archive, input =>
+            {
+                var checkedWorld = WorldV1ArchiveCodec.Read(input);
+                if (checkedWorld.Snapshot.WorldId != saved.WorldId ||
+                    checkedWorld.UnavailableModuleVersionIds.Count != 0)
+                    throw new InvalidDataException(
+                        "Prepared save failed exact-version validation.");
+            });
+            return "World saved: " + saved.WorldName;
+        }
+
+        public string ReopenCurrentWorldFile()
+        {
+            if (Context == null) throw new InvalidOperationException("World is not ready.");
+            return OpenWorldFile(Context.WorldId);
+        }
+
+        public IReadOnlyList<SavedWorldChoice> ListSavedWorlds()
+        {
+            var directory = Path.Combine(StorageRoot, "worlds");
+            var choices = new List<SavedWorldChoice>();
+            if (!Directory.Exists(directory)) return choices.AsReadOnly();
+            foreach (var path in Directory.GetFiles(directory, "*.ssworld"))
+            {
+                var text = Path.GetFileNameWithoutExtension(path);
+                if (!Guid.TryParseExact(text, "D", out var id) ||
+                    text != id.ToString("D")) continue;
+                try
+                {
+                    using (var input = File.OpenRead(path))
+                    {
+                        var loaded = WorldV1ArchiveCodec.Read(input);
+                        if (loaded.Snapshot.WorldId == id)
+                            choices.Add(new SavedWorldChoice(id,
+                                loaded.Snapshot.WorldName));
+                    }
+                }
+                catch (Exception error) when (error is IOException ||
+                    error is ArgumentException || error is InvalidOperationException)
+                {
+                    // A damaged world is not presented as a valid load choice.
+                    // Backup selection remains a separate recovery flow.
+                }
+            }
+            choices.Sort((first, second) => string.CompareOrdinal(
+                first.WorldName, second.WorldName));
+            return choices.AsReadOnly();
+        }
+
+        public string OpenWorldFile(Guid worldId)
+        {
+            var root = StorageRoot;
+            AtomicPackageFilePublisher.Recover(root);
+            var path = ModuleLibraryStore.WorldPath(root, worldId);
+            if (!File.Exists(path))
+                throw new FileNotFoundException("No saved copy of this world exists.", path);
+            LoadedWorldV1Archive loaded;
+            using (var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.Read))
+            {
+                var records = WorldArchiveContainer.Read(input);
+                var manifest = WorldManifestJsonReader.Read(records.ManifestJson);
+                IReadOnlyDictionary<Guid, byte[]> copies = null;
+                try
+                {
+                    var ids = new List<Guid>();
+                    foreach (var version in manifest.ModuleVersions)
+                        ids.Add(version.VersionId);
+                    copies = ModuleLibraryStore.ExactCopies(root, ids);
+                }
+                catch (InvalidDataException)
+                {
+                    // A damaged library index does not invalidate an otherwise
+                    // healthy embedded world; unresolved modules use placeholders.
+                }
+                input.Position = 0;
+                loaded = WorldV1ArchiveCodec.Read(input, copies);
+            }
+            OpenWorld(loaded.Snapshot);
+            return loaded.UnavailableModuleVersionIds.Count == 0
+                ? "World reopened at simulation time zero."
+                : "World reopened with " + loaded.UnavailableModuleVersionIds.Count +
+                  " unavailable exact module version(s).";
+        }
+
+        public string PublishPackage(OneBitPackageDraft draft)
+        {
+            if (draft == null || Context == null)
+                throw new ArgumentException("A current package draft is required.");
+            var root = StorageRoot;
+            Directory.CreateDirectory(root);
+            AtomicPackageFilePublisher.Recover(root);
+            var staged = OneBitPackageStager.Prepare(Context, draft,
+                Guid.NewGuid(), CaptureCurrentWorld().Player);
+            var definition = WorldV1JsonWriter.WriteModule(staged.Version);
+            var world = WorldV1ArchiveCodec.Write(staged.SavedWorld);
+            var index = ModuleLibraryStore.WithAddedVersion(root, definition);
+            var receipt = AtomicPackageFilePublisher.Publish(root,
+                staged.SavedWorld.WorldId, staged.Version.VersionId,
+                world, index, definition,
+                verifyWorld =>
+                {
+                    var loaded = WorldV1ArchiveCodec.Read(verifyWorld);
+                    if (loaded.Snapshot.WorldId != staged.SavedWorld.WorldId ||
+                        loaded.UnavailableModuleVersionIds.Count != 0 ||
+                        !loaded.Snapshot.ModuleVersions.ContainsKey(
+                            staged.Version.VersionId))
+                        throw new InvalidDataException("Prepared package world is invalid.");
+                },
+                verifyIndex =>
+                {
+                    using (var memory = new MemoryStream())
+                    {
+                        verifyIndex.CopyTo(memory);
+                        var found = false;
+                        foreach (var item in ModuleLibraryIndexJson.Read(memory.ToArray()))
+                            if (item.VersionId == staged.Version.VersionId &&
+                                item.FamilyId == staged.Version.FamilyId &&
+                                item.Sha256 == WorldManifestIntegrity.Sha256Hex(
+                                    definition)) found = true;
+                        if (!found) throw new InvalidDataException(
+                            "Prepared library index lacks the exact version.");
+                    }
+                },
+                verifyDefinition =>
+                {
+                    using (var memory = new MemoryStream())
+                    {
+                        verifyDefinition.CopyTo(memory);
+                        var parsed = WorldV1JsonReader.ReadModule(memory.ToArray());
+                        if (parsed.VersionId != staged.Version.VersionId ||
+                            parsed.FamilyId != staged.Version.FamilyId)
+                            throw new InvalidDataException(
+                                "Prepared definition identity changed.");
+                    }
+                });
+            Context.ApplyDurablyPublishedPackage(staged, receipt);
+            Inventory = Context.Inventory;
+            Interaction.Attach(Session, controller, Inventory);
+            return "Published module " + staged.Version.Name +
+                " into inventory slot " + (staged.InventorySlot + 1) + ".";
         }
 
         private void BuildGeneratedWorld(WorldBounds bounds)

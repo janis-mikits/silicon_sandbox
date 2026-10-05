@@ -2,6 +2,14 @@
 
 This log records only new game or material cross-system choices that would normally have required the user's decision. The user authorized choosing the recommended option during the extended first-playable implementation. Routine code choices are omitted; the canonical document linked for each entry governs behavior.
 
+## 5 October 2026 — First-playable Save, Load, and Publish controls
+
+**Issue:** The professor must save, quit, reopen an authored world and publish a fixed module, but the broader illustrated main menu is not yet implemented. A current-world-only Reopen button would fail after restarting because a fresh world has a different ID.
+
+**Options:** (1) Delay the save/reopen demonstration until the complete main menu exists; (2) add temporary pause-screen Save World, Reopen Saved, and Browse saved worlds controls, plus an explicit Publish module action in the package preview.
+
+**Recommendation adopted:** Option 2. Browse reads only validated SiliconSandbox archives and opens by exact world ID. The full main-menu requirement remains. Recorded in [building and interface](../docs/building-and-interface.md#menus-and-inventory-appearance).
+
 ## 5 October 2026 — Exact version 1 appearance and port JSON shapes
 
 **Issue:** The accepted schema requires a component `appearance`, module `bitOrder`, and typed `bitTargets`, but leaves their literal JSON shapes unspecified. A writer and strict reader must agree before a save becomes durable.
