@@ -1,7 +1,8 @@
 # Slice 2 graph/runtime progress — 5 October 2026
 
-This is an intermediate report, not a slice acceptance result. The interactive
-player placement, break, junction, and Configure flow is still unfinished.
+This is an intermediate report, not a slice acceptance result. Player placement,
+junction targeting, and Configure are still unfinished. A targeted left-click
+break in the development scene is now wired through the atomic edit path.
 
 The authored one-bit topology now projects through `OneBitCircuitPlanBuilder`
 into transient net indexes and source/AND bindings. `GraphDrivenOneBitCircuit`
@@ -9,7 +10,10 @@ settles source and gate work without Unity frame updates, preserves source
 runtime state across a settled graph replacement, and reads a disconnected
 input as Z. `OneBitCircuitInspection` reads the same graph and simulator values.
 The development AND scene uses this path for its labels, colors, and Inspect
-values. Fixed fixture wiring remains only as a separate earlier test path.
+values. Left-clicking a span validates and publishes a break, redraws the
+surviving authored routes, and updates settled signal colors. A new Play Mode
+test checks the visible break and independent source-side signal. Fixed fixture
+wiring remains only as a separate earlier test path.
 
 Independent NUnit expectations added: an empty world has no invented nets;
 all 16 ordered AND pairs use a literal expected table; breaking B's wire

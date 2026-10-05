@@ -16,9 +16,9 @@ namespace SiliconSandbox.Bootstrap
         public const string BConnectorName = "Fixture B Connector";
         public const string YConnectorName = "Fixture Y Connector";
 
-        private readonly List<Renderer> aRenderers = new List<Renderer>();
-        private readonly List<Renderer> bRenderers = new List<Renderer>();
-        private readonly List<Renderer> yRenderers = new List<Renderer>();
+        private readonly List<GameObject> routeRoots = new List<GameObject>();
+        private readonly Dictionary<System.Guid, List<Renderer>> routeRenderers =
+            new Dictionary<System.Guid, List<Renderer>>();
         private TextMesh aLabel;
         private TextMesh bLabel;
         private TextMesh yLabel;
@@ -29,6 +29,8 @@ namespace SiliconSandbox.Bootstrap
         private List<OneBitComponent> components;
         private System.Guid hoveredConnectorId;
         private System.Guid selectedConnectorId;
+        private float invalidEditUntil;
+        private bool invalidEditActive;
 
         public GraphDrivenOneBitCircuit Circuit { get; private set; }
         public OneBitCircuitInspection Inspector { get; private set; }
@@ -57,9 +59,7 @@ namespace SiliconSandbox.Bootstrap
             CreateBody("Fixture Source B", new Vector3(10.5f, 1.5f, 17.5f), new Color(0.65f, 0.65f, 0.8f));
             CreateBody(GateObjectName, new Vector3(16.5f, 1.5f, 15.5f), new Color(0.85f, 0.7f, 0.3f));
 
-            MakeRoute(AConnectorName, aRenderers, topology.Connectors[0]);
-            MakeRoute(BConnectorName, bRenderers, topology.Connectors[1]);
-            MakeRoute(YConnectorName, yRenderers, topology.Connectors[2]);
+            DrawRoutes();
 
             aLabel = MakeLabel("Fixture A Label", new Vector3(10f, 2.4f, 14f));
             bLabel = MakeLabel("Fixture B Label", new Vector3(10f, 2.4f, 17f));
@@ -79,9 +79,57 @@ namespace SiliconSandbox.Bootstrap
             RefreshPresentation();
         }
 
+        // The click path and tests use the same all-or-nothing authored edit.
+        public bool BreakSpan(System.Guid connectorId, System.Guid spanId)
+        {
+            if (spanId == System.Guid.Empty) return false;
+            try
+            {
+                var edit = OneBitTopologyEdits.BreakSpan(topology, connectorId, spanId);
+                var candidate = OneBitCircuitPlanBuilder.Build(edit.Design, components);
+                Circuit.ReplacePlan(candidate.Plan);
+                topology = edit.Design;
+                builtPlan = candidate;
+                Inspector = new OneBitCircuitInspection(topology, components, builtPlan, Circuit);
+                selectedConnectorId = System.Guid.Empty;
+                hoveredConnectorId = System.Guid.Empty;
+                DrawRoutes();
+                RefreshPresentation();
+                return true;
+            }
+            catch (System.ArgumentException)
+            {
+                InvalidEdit(connectorId, spanId);
+                return false;
+            }
+            catch (System.InvalidOperationException)
+            {
+                InvalidEdit(connectorId, spanId);
+                return false;
+            }
+        }
+
+        private void InvalidEdit(System.Guid connectorId, System.Guid spanId)
+        {
+            invalidEditUntil = Time.unscaledTime + 0.18f;
+            invalidEditActive = true;
+            foreach (var root in routeRoots)
+                foreach (var part in root.GetComponentsInChildren<RoutePartIdentity>())
+                    if (part.ConnectorId == connectorId && part.SpanId == spanId)
+                    {
+                        var renderer = part.GetComponent<Renderer>();
+                        if (renderer != null) renderer.material.color = Color.red;
+                    }
+        }
+
         private void Update()
         {
             if (!built) return;
+            if (invalidEditActive && Time.unscaledTime >= invalidEditUntil)
+            {
+                invalidEditActive = false;
+                RefreshPresentation();
+            }
             if (Input.GetKeyDown(KeyCode.Alpha1))
                 SetInputs(Next(Circuit.Source(authoredFixture.SourceA.Id).Drive),
                     Circuit.Source(authoredFixture.SourceB.Id).Drive);
@@ -90,16 +138,25 @@ namespace SiliconSandbox.Bootstrap
                     Next(Circuit.Source(authoredFixture.SourceB.Id).Drive));
             var camera = Camera.main;
             hoveredConnectorId = System.Guid.Empty;
+            RoutePartIdentity hoveredPart = null;
             if (camera != null && Physics.Raycast(camera.transform.position,
                     camera.transform.forward, out var hit, 15f))
             {
                 var part = hit.collider.GetComponent<RoutePartIdentity>();
-                if (part != null) hoveredConnectorId = part.ConnectorId;
+                if (part != null)
+                {
+                    hoveredPart = part;
+                    hoveredConnectorId = part.ConnectorId;
+                }
             }
+            if (Input.GetMouseButtonDown(0) && hoveredPart != null &&
+                hoveredPart.SpanId != System.Guid.Empty)
+                BreakSpan(hoveredPart.ConnectorId, hoveredPart.SpanId);
             if (Input.GetKeyDown(KeyCode.I) && hoveredConnectorId != System.Guid.Empty)
                 selectedConnectorId = hoveredConnectorId;
             if (Input.GetKeyDown(KeyCode.Escape)) selectedConnectorId = System.Guid.Empty;
-            if (A.Value == LogicBit.X || B.Value == LogicBit.X || Y.Value == LogicBit.X)
+            if (!invalidEditActive &&
+                (A.Value == LogicBit.X || B.Value == LogicBit.X || Y.Value == LogicBit.X))
                 RefreshPresentation();
         }
 
@@ -156,9 +213,28 @@ namespace SiliconSandbox.Bootstrap
             aLabel.text = "A = " + A.Value.ToSymbol();
             bLabel.text = "B = " + B.Value.ToSymbol();
             yLabel.text = "Y = " + Y.Value.ToSymbol();
-            SetSignalColor(aRenderers, A.Value);
-            SetSignalColor(bRenderers, B.Value);
-            SetSignalColor(yRenderers, Y.Value);
+            foreach (var route in topology.Connectors)
+            {
+                var member = JoinMember.ConnectorNode(route.Id, route.Nodes[0].Id);
+                SetSignalColor(routeRenderers[route.Id], Circuit.Net(builtPlan.NetIndex(member)).Value);
+            }
+        }
+
+        private void DrawRoutes()
+        {
+            foreach (var root in routeRoots) Destroy(root);
+            routeRoots.Clear();
+            routeRenderers.Clear();
+            foreach (var route in topology.Connectors)
+            {
+                var name = route.Id == authoredFixture.Connectors[0].Id ? AConnectorName :
+                    route.Id == authoredFixture.Connectors[1].Id ? BConnectorName :
+                    route.Id == authoredFixture.Connectors[2].Id ? YConnectorName :
+                    "Wire " + route.Id.ToString("D");
+                var renderers = new List<Renderer>();
+                routeRenderers.Add(route.Id, renderers);
+                routeRoots.Add(MakeRoute(name, renderers, route));
+            }
         }
 
         private ResolvedBit PinValue(FixtureComponent component, string key) =>
@@ -195,7 +271,7 @@ namespace SiliconSandbox.Bootstrap
             return body;
         }
 
-        private static void MakeRoute(string name, List<Renderer> renderers, ConnectorRoute route)
+        private static GameObject MakeRoute(string name, List<Renderer> renderers, ConnectorRoute route)
         {
             var root = new GameObject(name);
             var identityCap = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -227,6 +303,7 @@ namespace SiliconSandbox.Bootstrap
                 MakeSegment(name, route.Id, span.Id, root.transform, renderers, xBend, yBend);
                 MakeSegment(name, route.Id, span.Id, root.transform, renderers, yBend, to);
             }
+            return root;
         }
 
         private static Vector3 Position(RouteNode node) =>

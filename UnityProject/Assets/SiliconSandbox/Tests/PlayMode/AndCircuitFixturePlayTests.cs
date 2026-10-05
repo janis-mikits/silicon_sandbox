@@ -52,5 +52,41 @@ namespace SiliconSandbox.Tests.PlayMode
                     Is.EqualTo("Y = " + sample[2].ToSymbol()));
             }
         }
+
+        [UnityTest]
+        public IEnumerator BreakingVisibleSpanSplitsSimulationAndRedrawsSurvivingRoutes()
+        {
+            SceneManager.LoadScene("FlatWorld");
+            yield return null;
+            var fixture = GameObject.Find(FlatWorldSmoke.FloorName).GetComponent<AndCircuitFixture>();
+            fixture.SetInputs(LogicBit.One, LogicBit.One);
+            Assert.That(fixture.Y.Value, Is.EqualTo(LogicBit.One));
+            var oldRoute = fixture.AuthoredTopology.Connectors[1];
+            var firstNodeId = oldRoute.Nodes[0].Id;
+            Assert.That(fixture.BreakSpan(oldRoute.Id, oldRoute.Spans[6].Id), Is.True);
+            yield return null;
+
+            Assert.That(fixture.AuthoredTopology.Connectors.Count, Is.EqualTo(4));
+            Assert.That(fixture.B.Value, Is.EqualTo(LogicBit.Z));
+            Assert.That(fixture.Y.Value, Is.EqualTo(LogicBit.X));
+            Assert.That(GameObject.Find(AndCircuitFixture.BConnectorName), Is.Null);
+            Assert.That(GameObject.Find("Fixture Y Label").GetComponent<TextMesh>().text,
+                Is.EqualTo("Y = X"));
+            var sourcePieceFound = false;
+            foreach (var route in fixture.AuthoredTopology.Connectors)
+            {
+                Assert.That(route.Id, Is.Not.EqualTo(oldRoute.Id));
+                foreach (var node in route.Nodes)
+                    if (node.Id == firstNodeId)
+                    {
+                        sourcePieceFound = true;
+                        var inspected = fixture.Inspector.InspectConnector(route.Id);
+                        Assert.That(inspected.Value, Is.EqualTo(LogicBit.One));
+                    }
+            }
+            Assert.That(sourcePieceFound, Is.True);
+            fixture.SetInputs(LogicBit.Zero, LogicBit.One);
+            Assert.That(fixture.Y.Value, Is.EqualTo(LogicBit.Zero));
+        }
     }
 }
