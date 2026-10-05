@@ -15,6 +15,40 @@ namespace SiliconSandbox.Tests.PlayMode
     public sealed class PlayableWorldPlayTests
     {
         [UnityTest]
+        public IEnumerator GeneratedFloorAndFourWallsMatchAuthoredWorldBounds()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var floor = GameObject.Find(FlatWorldSmoke.FloorName);
+            var bounds = floor.GetComponent<PlayableWorldBootstrap>()
+                .Session.Design.Bounds;
+            Assert.That(floor.transform.position.x,
+                Is.EqualTo(bounds.WidthCells * 0.5f).Within(0.001f));
+            Assert.That(floor.transform.position.z,
+                Is.EqualTo(bounds.LengthCells * 0.5f).Within(0.001f));
+            Assert.That(floor.transform.localScale.x,
+                Is.EqualTo(bounds.WidthCells));
+            Assert.That(floor.transform.localScale.z,
+                Is.EqualTo(bounds.LengthCells));
+            foreach (var face in new[] { "West", "East", "South", "North" })
+            {
+                var wall = GameObject.Find("Sandbox boundary " + face);
+                Assert.That(wall, Is.Not.Null);
+                Assert.That(wall.GetComponent<Collider>(), Is.Not.Null);
+                Assert.That(wall.GetComponent<WorldSelectablePart>(), Is.Null,
+                    "Generated world boundaries cannot be broken as authored objects.");
+            }
+            var player = floor.GetComponent<PlayableWorldBootstrap>()
+                .Interaction.transform;
+            player.position = new Vector3(-5f, 50f, -5f);
+            yield return null;
+            Assert.That(player.position.x, Is.GreaterThanOrEqualTo(0f));
+            Assert.That(player.position.z, Is.GreaterThanOrEqualTo(0f));
+            Assert.That(player.position.y,
+                Is.LessThanOrEqualTo(bounds.HeightCells - 3f));
+        }
+
+        [UnityTest]
         public IEnumerator TwoModulesKeepExpectedStateWhileViewAndCameraAreAway()
         {
             SceneManager.LoadScene("PlayableWorld");

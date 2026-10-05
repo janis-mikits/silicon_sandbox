@@ -1,3 +1,4 @@
+using SiliconSandbox.Authoring;
 using UnityEngine;
 
 namespace SiliconSandbox.Interaction
@@ -15,11 +16,13 @@ namespace SiliconSandbox.Interaction
         private float verticalVelocity;
         private float lastSpacePress = -10f;
         private bool interfaceOpen;
+        private WorldBounds? worldBounds;
 
         public bool Flying { get; private set; }
         public Transform CameraPivot => cameraPivot;
 
         public void SetCameraPivot(Transform pivot) => cameraPivot = pivot;
+        public void SetWorldBounds(WorldBounds bounds) => worldBounds = bounds;
 
         public void SetInterfaceOpen(bool open)
         {
@@ -77,6 +80,23 @@ namespace SiliconSandbox.Interaction
                 velocity.y = verticalVelocity;
             }
             character.Move(velocity * Time.deltaTime);
+            if (worldBounds.HasValue)
+            {
+                var bounds = worldBounds.Value;
+                var foot = transform.position;
+                var inside = new Vector3(
+                    Mathf.Clamp(foot.x, character.radius,
+                        bounds.WidthCells - character.radius),
+                    Mathf.Clamp(foot.y, 1f,
+                        Mathf.Max(1f, bounds.HeightCells - character.height)),
+                    Mathf.Clamp(foot.z, character.radius,
+                        bounds.LengthCells - character.radius));
+                if (inside != foot)
+                {
+                    transform.position = inside;
+                    if (inside.y != foot.y) verticalVelocity = 0f;
+                }
+            }
         }
     }
 }

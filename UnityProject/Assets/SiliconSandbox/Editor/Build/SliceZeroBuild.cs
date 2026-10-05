@@ -28,7 +28,7 @@ namespace SiliconSandbox.EditorBuild
 
             var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
             floor.name = FlatWorldSmoke.FloorName;
-            floor.transform.position = new Vector3(15.5f, 0.5f, 15.5f);
+            floor.transform.position = new Vector3(16f, 0.5f, 16f);
             floor.transform.localScale = new Vector3(32, 1, 32);
             floor.AddComponent<FlatWorldSmoke>();
 

@@ -22,6 +22,7 @@ namespace SiliconSandbox.Bootstrap
             Session = new OneBitWorldSession(OneBitWorldDesign.Empty(
                 new WorldBounds(32, 32, 16)));
             Inventory = OneBitPlayerInventory.NewFreeplay();
+            BuildGeneratedWorld(Session.Design.Bounds);
             var renderedWorld = new GameObject("Authored one-bit world");
             WorldView = renderedWorld.AddComponent<OneBitWorldView>();
             WorldView.Attach(Session);
@@ -41,6 +42,7 @@ namespace SiliconSandbox.Bootstrap
             camera.fieldOfView = 70f;
             var controller = playerObject.AddComponent<CreativeCameraController>();
             controller.SetCameraPivot(camera.transform);
+            controller.SetWorldBounds(Session.Design.Bounds);
             Interaction = playerObject.AddComponent<OneBitWorldInteraction>();
             Interaction.Attach(Session, controller, Inventory);
 
@@ -51,6 +53,39 @@ namespace SiliconSandbox.Bootstrap
                 GetComponent<Collider>() != null;
             File.WriteAllText(output, valid ? "PASS\n" : "FAIL\n");
             UnityEngine.Application.Quit(valid ? 0 : 1);
+        }
+
+        private void BuildGeneratedWorld(WorldBounds bounds)
+        {
+            transform.position = new Vector3(bounds.WidthCells * 0.5f,
+                0.5f, bounds.LengthCells * 0.5f);
+            transform.localScale = new Vector3(bounds.WidthCells, 1f,
+                bounds.LengthCells);
+            GetComponent<Renderer>().material.color =
+                new Color(0.84f, 0.76f, 0.59f);
+            var height = bounds.HeightCells;
+            var middleY = height * 0.5f;
+            Wall("West", new Vector3(-0.5f, middleY,
+                bounds.LengthCells * 0.5f),
+                new Vector3(1f, height, bounds.LengthCells + 2f));
+            Wall("East", new Vector3(bounds.WidthCells + 0.5f, middleY,
+                bounds.LengthCells * 0.5f),
+                new Vector3(1f, height, bounds.LengthCells + 2f));
+            Wall("South", new Vector3(bounds.WidthCells * 0.5f, middleY,
+                -0.5f), new Vector3(bounds.WidthCells + 2f, height, 1f));
+            Wall("North", new Vector3(bounds.WidthCells * 0.5f, middleY,
+                bounds.LengthCells + 0.5f),
+                new Vector3(bounds.WidthCells + 2f, height, 1f));
+        }
+
+        private static void Wall(string face, Vector3 position, Vector3 scale)
+        {
+            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.name = "Sandbox boundary " + face;
+            wall.transform.position = position;
+            wall.transform.localScale = scale;
+            wall.GetComponent<Renderer>().material.color =
+                new Color(0.44f, 0.27f, 0.13f);
         }
     }
 }
