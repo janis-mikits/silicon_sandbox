@@ -35,7 +35,10 @@ namespace SiliconSandbox.Application
             sorted.Sort();
             FrameCount = sorted.Count;
             DurationSeconds = measuredDurationSeconds;
-            MedianMilliseconds = NearestRank(sorted, 0.5d);
+            MedianMilliseconds = sorted.Count % 2 == 1
+                ? sorted[sorted.Count / 2]
+                : (sorted[sorted.Count / 2 - 1] +
+                    sorted[sorted.Count / 2]) * 0.5d;
             P95Milliseconds = NearestRank(sorted, 0.95d);
             P99Milliseconds = NearestRank(sorted, 0.99d);
             MaxMilliseconds = sorted[sorted.Count - 1];

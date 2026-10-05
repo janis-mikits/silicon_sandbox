@@ -15,7 +15,7 @@ namespace SiliconSandbox.Tests.EditMode
             var measured = new FirstPlayableFrameMetrics(samples, 2d);
             Assert.That(measured.FrameCount, Is.EqualTo(100));
             Assert.That(measured.AverageFramesPerSecond, Is.EqualTo(50d));
-            Assert.That(measured.MedianMilliseconds, Is.EqualTo(50d).Within(1e-9));
+            Assert.That(measured.MedianMilliseconds, Is.EqualTo(50.5d).Within(1e-9));
             Assert.That(measured.P95Milliseconds, Is.EqualTo(95d).Within(1e-9));
             Assert.That(measured.P99Milliseconds, Is.EqualTo(99d).Within(1e-9));
             Assert.That(measured.MaxMilliseconds, Is.EqualTo(100d).Within(1e-9));
