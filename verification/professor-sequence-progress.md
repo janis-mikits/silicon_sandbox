@@ -1,0 +1,5 @@
+# Professor stateful sequence progress
+
+A new Core integration test constructs an SR circuit, prepares an independent fixed package, opens its proposed authored world, places two instances, connects four initially Off one-bit sources and the 10 Hz world clock, and checks the independent Q sequence at all three required rising edges: X/X → 1/X → 1/0 → 0/0. It then captures an in-memory authored snapshot and reopens it, checking the exact instance identities and connector count, sources Off, stopped low clock and time zero, Q=X/X, and the first 00 hold edge. These expected states are literal values from the accepted [professor demonstration](../first-playable-requirement-test-matrix.md#required-two-instance-sequence), not values copied from the simulator.
+
+The test passed in the offline Edit Mode runner: **153 passed, zero failed**. It does not exercise the V1 ZIP/JSON file, graphical UI, native Unity Test Runner, or actual offscreen rendering; those acceptance gates remain open. The code change is `UnityProject/Assets/SiliconSandbox/Tests/EditMode/ProfessorStatefulSequenceTests.cs` plus its `.meta`.
