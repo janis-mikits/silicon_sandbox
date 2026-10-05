@@ -57,5 +57,31 @@ namespace SiliconSandbox.Application
             OneBitTopologyGraphBuilder.Build(candidate.Topology);
             return candidate;
         }
+
+        public static OneBitWorldDesign ConfigureSource(OneBitWorldDesign original,
+            Guid sourceId, LogicBit onValue, bool initialOn)
+        {
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            var components = new List<PlacedOneBitComponent>(original.Components);
+            var found = false;
+            for (var i = 0; i < components.Count; i++)
+            {
+                var previous = components[i];
+                if (previous.Id != sourceId) continue;
+                if (previous.TypeId != BuiltInPinCatalog.Source)
+                    throw new ArgumentException("Target is not a Constant Logic Source.");
+                components[i] = new PlacedOneBitComponent(previous.Id,
+                    previous.TypeId, previous.TypeVersion, previous.AnchorCell,
+                    previous.Orientation, previous.PinIds, onValue, initialOn,
+                    null, previous.Tag);
+                found = true;
+                break;
+            }
+            if (!found) throw new ArgumentException("Unknown source identity.");
+            var candidate = new OneBitWorldDesign(original.Bounds, components,
+                original.Topology);
+            OneBitTopologyGraphBuilder.Build(candidate.Topology);
+            return candidate;
+        }
     }
 }

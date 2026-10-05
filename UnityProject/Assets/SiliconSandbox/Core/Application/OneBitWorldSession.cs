@@ -57,6 +57,19 @@ namespace SiliconSandbox.Application
             Publish(new OneBitWorldDesign(Design.Bounds, Design.Components, edit.Design));
         }
 
+        public void ConfigureSource(Guid sourceId, LogicBit onValue, bool initialOn)
+        {
+            SafePause();
+            var candidate = OneBitWorldEdits.ConfigureSource(Design,
+                sourceId, onValue, initialOn);
+            var nextRevision = checked(Revision + 1);
+            var built = Build(candidate);
+            Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
+            Design = candidate;
+            Built = built;
+            Revision = nextRevision;
+        }
+
         private void SafePause()
         {
             if (!Scheduler.IsPaused) Scheduler.AdvanceUntil(Scheduler.Now);

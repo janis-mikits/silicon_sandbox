@@ -26,7 +26,8 @@ namespace SiliconSandbox.Simulation
         private GraphDrivenOneBitCircuit(OneBitCircuitPlan next,
             Dictionary<RuntimeObjectKey, ConstantLogicSource> oldSources,
             Dictionary<RuntimeObjectKey, OneBitSrFlipFlop> oldStorage,
-            LogicBit previousWorldClockLevel, bool reset)
+            LogicBit previousWorldClockLevel, bool reset,
+            bool refreshAuthoredSourceConfiguration = false)
         {
             if (next == null) throw new ArgumentNullException(nameof(next));
             plan = next;
@@ -38,8 +39,14 @@ namespace SiliconSandbox.Simulation
                 ConstantLogicSource source;
                 if (oldSources != null &&
                     oldSources.TryGetValue(binding.RuntimeKey, out var existing))
-                    source = reset ? new ConstantLogicSource(existing.ConfiguredOnValue,
-                        existing.InitialOn) : existing;
+                {
+                    if (reset || refreshAuthoredSourceConfiguration)
+                    {
+                        source = new ConstantLogicSource(binding.OnValue, binding.InitialOn);
+                        if (!reset) source.SetOn(existing.IsOn);
+                    }
+                    else source = existing;
+                }
                 else
                     source = new ConstantLogicSource(binding.OnValue, binding.InitialOn);
                 sources.Add(binding.RuntimeKey, source);
@@ -132,6 +139,16 @@ namespace SiliconSandbox.Simulation
                 throw new InvalidOperationException("Graph replacement requires a settled boundary.");
             Publish(new GraphDrivenOneBitCircuit(next, sources, storage,
                 worldClockLevel, false));
+        }
+
+        // Rebuild a fully settled candidate with edited authored source settings
+        // while retaining each source's live On/Off choice and unrelated storage.
+        public void ReplacePlanWithAuthoredSourceConfiguration(OneBitCircuitPlan next)
+        {
+            if (pending.Count != 0)
+                throw new InvalidOperationException("Graph replacement requires a settled boundary.");
+            Publish(new GraphDrivenOneBitCircuit(next, sources, storage,
+                worldClockLevel, false, true));
         }
 
         private void Publish(GraphDrivenOneBitCircuit candidate)

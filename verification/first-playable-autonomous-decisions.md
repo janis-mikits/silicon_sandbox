@@ -57,3 +57,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Allow overlap and define per-shape collision checks now; (2) reject placement into any cell containing connector route geometry while allowing face attachment from adjacent cells.
 
 **Recommendation adopted:** Option 2 gives the first-playable placement preview a clear all-or-nothing occupancy rule without moving or hiding an existing wire. It leaves the four-channel rule for connector-only cells intact. Recorded in [physical connections](../docs/physical-connections.md#pins-and-targeting).
+
+## 5 October 2026 — Source Configure versus live On/Off state
+
+**Issue:** The source specification separates saved initial On/Off from transient runtime On/Off, but does not explicitly say whether changing initial On/Off in Configure immediately flips a running source.
+
+**Options:** (1) Apply the new initial state immediately; (2) preserve the current runtime On/Off choice and use the new initial state only on load or Reset Simulation.
+
+**Recommendation adopted:** Option 2 keeps the meaning of “initial” consistent with save/reopen and avoids a surprise live toggle during configuration. A new configured On value still changes the present drive when the source is On. Recorded in [components and timing](../docs/components-and-rtl-timing.md#sources-on-load-and-reset).

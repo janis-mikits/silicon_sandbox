@@ -41,3 +41,25 @@ rejection` and `PASS: safe authored revision publish preserves unrelated
 simulation`. The connector extension also exited 0 with `PASS: explicit
 connector joins and authored break propagation`. `git diff --check` exited
 0. The NUnit suite and Unity build have not run for these changes.
+
+The source Configure foundation now publishes saved On value and initial
+On/Off at one safe revision. It keeps the source's current transient On/Off
+choice, updates the live drive when appropriate, and preserves unrelated SR
+state. An independent NUnit case expects an On source reconfigured to Z to
+release its net, then expects Reset Simulation to return it to its newly
+configured Off state and drive 0. A second case rejects configuring an AND
+gate without publishing any revision. The autonomous game decision is
+recorded in [components and timing](../docs/components-and-rtl-timing.md#sources-on-load-and-reset).
+
+The same offline command above exited 0 with `PASS: authored source
+configuration and ordinary reset`; `git diff --check` exited 0. After the
+user opened the project in Unity Hub, I retried:
+
+```sh
+./scripts/verify-unity.sh --editor '/Applications/Unity/Hub/Editor/6000.3.24f1/Unity.app/Contents/MacOS/Unity' --target StandaloneOSX
+```
+
+The Editor again stalled at Licensing Client channel initialization after
+assembly reload. I interrupted the stalled wrapper (exit 130). This attempt
+did not run Edit Mode tests, Play Mode tests, or a build and supplies no Unity
+pass claim for the newer code.
