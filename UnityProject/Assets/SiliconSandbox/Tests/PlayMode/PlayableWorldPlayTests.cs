@@ -6,6 +6,7 @@ using NUnit.Framework;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Bootstrap;
 using SiliconSandbox.Contracts;
+using SiliconSandbox.Interaction;
 using SiliconSandbox.Presentation;
 using SiliconSandbox.Persistence;
 using UnityEngine;
@@ -16,6 +17,57 @@ namespace SiliconSandbox.Tests.PlayMode
 {
     public sealed class PlayableWorldPlayTests
     {
+        [UnityTest]
+        public IEnumerator InspectOpensReadableModalForComponentAndConnector()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            var session = bootstrap.Session;
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(6, 1, 6), GridOrientation.Default);
+            var source = session.Design.Components[0];
+            session.PlaceWireStub(JoinMember.ComponentPin(source.Id,
+                source.PinIds["OUT"]), new GridCell(8, 1, 6));
+            var connectorId = session.Design.Topology.Connectors[0].Id;
+            yield return null;
+
+            WorldSelectablePart body = null;
+            WorldSelectablePart connector = null;
+            foreach (var part in UnityEngine.Object.FindObjectsByType<
+                WorldSelectablePart>(FindObjectsSortMode.None))
+            {
+                if (part.Kind == WorldPartKind.ComponentBody &&
+                    part.OwnerId == source.Id) body = part;
+                if (part.Kind == WorldPartKind.ConnectorSpan &&
+                    part.OwnerId == connectorId) connector = part;
+            }
+            Assert.That(body, Is.Not.Null);
+            Assert.That(connector, Is.Not.Null);
+            var interaction = bootstrap.Interaction;
+            var cameraController = interaction.GetComponent<CreativeCameraController>();
+            interaction.OpenInspection(body);
+            Assert.That(interaction.InspectionOpen, Is.True);
+            Assert.That(cameraController.InterfaceOpen, Is.True,
+                "Inspect must release the cursor for its scrollable panel.");
+            Assert.That(session.Inspector.InspectPin(source.Id,
+                source.PinIds["OUT"]).Value, Is.EqualTo(LogicBit.Zero));
+            interaction.CloseInspection();
+            Assert.That(cameraController.InterfaceOpen, Is.False);
+
+            interaction.OpenInspection(connector);
+            Assert.That(interaction.InspectionOpen, Is.True);
+            Assert.That(cameraController.InterfaceOpen, Is.True);
+            session.ToggleSource(source.Id);
+            Assert.That(session.Inspector.InspectConnector(connectorId).Value,
+                Is.EqualTo(LogicBit.One),
+                "A visible Inspect panel must use the live settled value.");
+            interaction.CloseInspection();
+            Assert.That(interaction.InspectionOpen, Is.False);
+            Assert.That(cameraController.InterfaceOpen, Is.False);
+        }
+
         [UnityTest]
         public IEnumerator ConnectorEditAcrossRenderRegionBoundaryKeepsDistantGraphics()
         {

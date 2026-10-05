@@ -74,6 +74,27 @@ namespace SiliconSandbox.Interaction
         public OneBitWorldSession Session => session;
         public OneBitPlayerInventory Inventory => inventory;
         public WorldSelectablePart HoveredPart => hovered;
+        public bool InspectionOpen => inspectOpen;
+
+        public void OpenInspection(WorldSelectablePart part)
+        {
+            if (session == null) throw new InvalidOperationException(
+                "No world is attached for inspection.");
+            if (part == null) throw new ArgumentNullException(nameof(part));
+            inspectedKind = part.Kind;
+            inspectedOwner = part.OwnerId;
+            inspectedPart = part.PartId;
+            internalInspectScroll = Vector2.zero;
+            inspectOpen = true;
+            player.SetInterfaceOpen(true);
+            HideGhost();
+        }
+
+        public void CloseInspection()
+        {
+            inspectOpen = false;
+            player?.SetInterfaceOpen(false);
+        }
 
         public void Attach(OneBitWorldSession activeSession,
             CreativeCameraController cameraController,
@@ -145,7 +166,7 @@ namespace SiliconSandbox.Interaction
                 player.SetInterfaceOpen(false);
                 return;
             }
-            if (configureOpen || inventoryOpen || pauseMenuOpen ||
+            if (configureOpen || inventoryOpen || pauseMenuOpen || inspectOpen ||
                 packageDraft != null) return;
             if (Input.GetKeyDown(KeyCode.E))
             {
@@ -235,10 +256,8 @@ namespace SiliconSandbox.Interaction
                 session.Scheduler.StepClockCycle();
             if (Input.GetKeyDown(KeyCode.I) && hovered != null)
             {
-                inspectedKind = hovered.Kind;
-                inspectedOwner = hovered.OwnerId;
-                inspectedPart = hovered.PartId;
-                inspectOpen = true;
+                OpenInspection(hovered);
+                return;
             }
             if (Input.GetKeyDown(KeyCode.C) && hovered != null &&
                 hovered.Kind == WorldPartKind.ComponentBody &&
@@ -967,6 +986,11 @@ namespace SiliconSandbox.Interaction
 
         private void Escape()
         {
+            if (inspectOpen)
+            {
+                CloseInspection();
+                return;
+            }
             if (packageDraft != null)
             {
                 packageDraft = null;
@@ -985,7 +1009,7 @@ namespace SiliconSandbox.Interaction
                 ClearWirePreview();
                 return;
             }
-            if (configureOpen || inventoryOpen || pauseMenuOpen || inspectOpen)
+            if (configureOpen || inventoryOpen || pauseMenuOpen)
             {
                 configureOpen = false;
                 inventoryOpen = false;
@@ -1031,7 +1055,7 @@ namespace SiliconSandbox.Interaction
                 for (var i = 0; i < 9; i++)
                 {
                     var title = (i + 1) + " " + SlotLabel(i);
-                    if (GUI.Button(new Rect(left + i * 72f,
+                    if (!inspectOpen && GUI.Button(new Rect(left + i * 72f,
                         Screen.height - 54f, 70f, 46f), title))
                     {
                         SelectSlot(i);
@@ -1483,6 +1507,11 @@ namespace SiliconSandbox.Interaction
                 DrawModuleInternalInspect();
                 return;
             }
+            if (inspectedKind == WorldPartKind.ComponentBody)
+            {
+                DrawComponentInspect();
+                return;
+            }
             OneBitInspection detail;
             try
             {
@@ -1496,7 +1525,7 @@ namespace SiliconSandbox.Interaction
                         inspectedOwner, inspectedPart);
                 else return;
             }
-            catch (KeyNotFoundException) { inspectOpen = false; return; }
+            catch (KeyNotFoundException) { CloseInspection(); return; }
             var names = new List<string>();
             foreach (var pin in detail.ConnectedPins) names.Add(PinName(pin));
             GUI.Box(new Rect(12f, 150f, 550f, 175f),
@@ -1507,12 +1536,44 @@ namespace SiliconSandbox.Interaction
                 detail.Explanation);
         }
 
+        private void DrawComponentInspect()
+        {
+            PlacedOneBitComponent component = null;
+            foreach (var item in session.Design.Components)
+                if (item.Id == inspectedOwner) { component = item; break; }
+            if (component == null) { CloseInspection(); return; }
+            var area = new Rect(12f, 150f, 550f, 305f);
+            GUI.Box(area, "Inspect " + component.TypeId + "  width 1");
+            var names = component.PinIds.Keys.ToList();
+            names.Sort(StringComparer.Ordinal);
+            var scrollArea = new Rect(area.x + 12f, area.y + 32f,
+                area.width - 24f, area.height - 44f);
+            var content = new Rect(0f, 0f, scrollArea.width - 20f,
+                Mathf.Max(scrollArea.height, names.Count * 66f));
+            internalInspectScroll = GUI.BeginScrollView(scrollArea,
+                internalInspectScroll, content);
+            for (var i = 0; i < names.Count; i++)
+            {
+                var name = names[i];
+                var detail = session.Inspector.InspectPin(component.Id,
+                    component.PinIds[name]);
+                var connections = new List<string>();
+                foreach (var pin in detail.ConnectedPins)
+                    connections.Add(PinName(pin));
+                GUI.Label(new Rect(0f, i * 66f, content.width, 64f),
+                    name + "=" + detail.Value.ToSymbol() + "  drivers " +
+                    detail.ActiveDrivers.Count + "  " + detail.Explanation +
+                    "\nConnected: " + string.Join(", ", connections));
+            }
+            GUI.EndScrollView();
+        }
+
         private void DrawModuleInternalInspect()
         {
             PlacedOneBitModuleInstance instance = null;
             foreach (var item in session.Design.Modules)
                 if (item.Id == inspectedOwner) { instance = item; break; }
-            if (instance == null) { inspectOpen = false; return; }
+            if (instance == null) { CloseInspection(); return; }
             var area = new Rect(12f, 150f, 550f, 305f);
             if (!session.ModuleVersions.TryGetValue(instance.VersionId,
                 out var version))

@@ -19,6 +19,7 @@ namespace SiliconSandbox.Interaction
         private WorldBounds? worldBounds;
 
         public bool Flying { get; private set; }
+        public bool InterfaceOpen => interfaceOpen;
         public Transform CameraPivot => cameraPivot;
 
         public void SetCameraPivot(Transform pivot) => cameraPivot = pivot;
