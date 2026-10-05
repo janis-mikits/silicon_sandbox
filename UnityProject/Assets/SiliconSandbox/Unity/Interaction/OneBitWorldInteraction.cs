@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
+using SiliconSandbox.Bootstrap;
 using SiliconSandbox.Contracts;
 using SiliconSandbox.Presentation;
 using SiliconSandbox.Persistence;
@@ -264,7 +265,13 @@ namespace SiliconSandbox.Interaction
                 else
                 {
                     var start = wireStart.Value;
-                    if (hovered == null) InvalidAction();
+                    if (hovered == null && hasHit &&
+                        hit.collider.GetComponent<PlayableWorldBootstrap>() != null)
+                    {
+                        PlacementCell(out var targetCell);
+                        TryEdit(() => session.PlaceWireStub(start, targetCell));
+                    }
+                    else if (hovered == null) InvalidAction();
                     else if (IsPinKind(hovered.Kind))
                     {
                         var pin = PickedPin(hovered);
@@ -824,8 +831,8 @@ namespace SiliconSandbox.Interaction
                     "  " + session.Scheduler.ClockLevel.ToSymbol() +
                     (session.Scheduler.IsPaused ? "  PAUSED" : ""));
                 if (wireStart.HasValue)
-                    GUI.Label(new Rect(12f, 62f, 400f, 28f),
-                        "Wire start selected. Aim at a free pin or connector node.");
+                GUI.Label(new Rect(12f, 62f, 400f, 28f),
+                        "Wire start selected. Aim at a pin, node, or floor cell.");
                 QuickLook();
             }
             if (rotationPreview != null)

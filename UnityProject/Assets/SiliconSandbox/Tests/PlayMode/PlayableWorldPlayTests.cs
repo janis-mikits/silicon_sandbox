@@ -15,6 +15,32 @@ namespace SiliconSandbox.Tests.PlayMode
     public sealed class PlayableWorldPlayTests
     {
         [UnityTest]
+        public IEnumerator OpenAndOutputWireHasSelectableVisibleEnd()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var session = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>().Session;
+            session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(6, 1, 6), GridOrientation.Default);
+            var gate = session.Design.Components[0];
+            session.PlaceWireStub(JoinMember.ComponentPin(gate.Id,
+                gate.PinIds["Y"]), new GridCell(8, 1, 6));
+            var route = session.Design.Topology.Connectors[0];
+            yield return null;
+            var foundEnd = false;
+            foreach (var part in UnityEngine.Object.FindObjectsByType<
+                WorldSelectablePart>(FindObjectsSortMode.None))
+                if (part.Kind == WorldPartKind.ConnectorNode &&
+                    part.OwnerId == route.Id &&
+                    part.PartId == route.Nodes[route.Nodes.Count - 1].Id)
+                    foundEnd = true;
+            Assert.That(foundEnd, Is.True);
+            Assert.That(session.Inspector.InspectConnector(route.Id).Value,
+                Is.EqualTo(LogicBit.X));
+        }
+
+        [UnityTest]
         public IEnumerator InvalidFlashRestoresLatestSettledSignalColor()
         {
             SceneManager.LoadScene("PlayableWorld");

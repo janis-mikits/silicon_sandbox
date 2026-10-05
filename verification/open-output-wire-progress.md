@@ -1,0 +1,7 @@
+# Open output wire progress
+
+The one-bit wire tool now accepts an empty floor-referenced cell after a free pin start, creating a visible route with one explicit pin join and an electrically open, targetable end. An invalid occupied or unroutable target publishes nothing. This supports the professor's required inspection of the AND Y **connector**. The authored-world AND integration test now inspects that connector rather than only the Y pin. A Unity Play Mode test is written to check the visible selectable end, but has not run in Unity.
+
+Offline repository-only Edit Mode runner: **156 passed, zero failed**. Offline Play Mode source build: **zero warnings/errors**. Exact commands are recorded in [benchmark instrumentation](benchmark-instrumentation-progress.md); the same commands were run after this change. The native Unity Test Runner and Mac build remain unrun for this revision because the Codex-launched Editor still lacks a Licensing Client channel. The wire-start HUD describes the new floor-cell action, but the final routed-path preview still needs Unity interaction verification.
+
+Changed files: `OneBitPinRoutePlanner.cs`, `OneBitWorldSession.cs`, `OneBitWorldInteraction.cs`, `OneBitPinRoutePlannerTests.cs`, `ProfessorAndSequenceTests.cs`, `PlayableWorldPlayTests.cs`, [building controls](../docs/building-and-interface.md), and the [autonomous decision log](first-playable-autonomous-decisions.md).

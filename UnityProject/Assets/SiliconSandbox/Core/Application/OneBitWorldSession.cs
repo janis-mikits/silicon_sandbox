@@ -140,6 +140,15 @@ namespace SiliconSandbox.Application
                 proposal.Route, proposal.Joins));
         }
 
+        public void PlaceWireStub(JoinMember pin, GridCell targetCell)
+        {
+            SafePause();
+            var proposal = OneBitPinRoutePlanner.PlanToOpenCell(
+                Design, pin, targetCell);
+            Publish(OneBitWorldEdits.PlaceConnector(Design,
+                proposal.Route, proposal.Joins));
+        }
+
         public void AddJoin(ElectricalJoin join, string chosenTag = null)
         {
             SafePause();

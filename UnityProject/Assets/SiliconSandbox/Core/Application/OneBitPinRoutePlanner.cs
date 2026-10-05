@@ -9,11 +9,11 @@ namespace SiliconSandbox.Application
         public ConnectorRoute Route { get; }
         public IReadOnlyList<ElectricalJoin> Joins { get; }
 
-        internal OneBitPinRouteProposal(ConnectorRoute route, ElectricalJoin first,
-            ElectricalJoin second)
+        internal OneBitPinRouteProposal(ConnectorRoute route,
+            params ElectricalJoin[] joins)
         {
             Route = route;
-            Joins = Array.AsReadOnly(new[] { first, second });
+            Joins = Array.AsReadOnly(joins);
         }
     }
 
@@ -127,6 +127,44 @@ namespace SiliconSandbox.Application
             throw new ArgumentException("No valid route to the targeted connector node.");
         }
 
+        public static OneBitPinRouteProposal PlanToOpenCell(
+            OneBitWorldDesign design, JoinMember pin, GridCell targetCell)
+        {
+            if (design == null) throw new ArgumentNullException(nameof(design));
+            if (!IsPhysicalPin(pin))
+                throw new ArgumentException("Choose a free physical pin.");
+            var sourcePin = FindPin(design, pin);
+            foreach (var join in design.Topology.Joins)
+                foreach (var member in join.Members)
+                    if (member.Equals(pin))
+                        throw new ArgumentException("The selected pin already has a connector.");
+            var start = Move(sourcePin.Cell, Face(sourcePin.PointQ));
+            var blockedComponents = BlockedCells(design);
+            for (var channel = 0; channel < 4; channel++)
+            {
+                var occupied = new HashSet<GridCell>(blockedComponents);
+                foreach (var route in design.Topology.Connectors)
+                    foreach (var node in route.Nodes)
+                        if (node.Channel == channel)
+                            occupied.Add(node.Cell);
+                var path = FindPath(design.Bounds, start, targetCell, occupied);
+                if (path == null) continue;
+                var proposal = Build(path, channel, pin, sourcePin, null,
+                    new QuarterPoint(2, 2, 2));
+                try
+                {
+                    OneBitWorldEdits.PlaceConnector(design, proposal.Route,
+                        proposal.Joins);
+                    return proposal;
+                }
+                catch (ArgumentException)
+                {
+                    // Another physical channel may have a valid route.
+                }
+            }
+            throw new ArgumentException("No valid open wire path to that cell.");
+        }
+
         private static OneBitPinRouteProposal DirectFaceBridge(
             OneBitWorldDesign design, JoinMember first, AuthoredPin firstPin,
             JoinMember second, AuthoredPin secondPin)
@@ -171,7 +209,7 @@ namespace SiliconSandbox.Application
 
         private static OneBitPinRouteProposal Build(IReadOnlyList<GridCell> path,
             int channel, JoinMember first, AuthoredPin firstPin,
-            JoinMember second, QuarterPoint finalPoint)
+            JoinMember? second, QuarterPoint finalPoint)
         {
             var connectorId = Guid.NewGuid();
             var nodes = new List<RouteNode>();
@@ -204,14 +242,17 @@ namespace SiliconSandbox.Application
                 previousExit = lastNode;
             }
             var route = new ConnectorRoute(connectorId, "wire", 1, nodes, spans);
-            return new OneBitPinRouteProposal(route,
+            var firstJoin = new ElectricalJoin(Guid.NewGuid(), new[]
+            {
+                first, JoinMember.ConnectorNode(connectorId, firstNode.Id)
+            });
+            if (!second.HasValue)
+                return new OneBitPinRouteProposal(route, firstJoin);
+            return new OneBitPinRouteProposal(route, firstJoin,
                 new ElectricalJoin(Guid.NewGuid(), new[]
                 {
-                    first, JoinMember.ConnectorNode(connectorId, firstNode.Id)
-                }),
-                new ElectricalJoin(Guid.NewGuid(), new[]
-                {
-                    second, JoinMember.ConnectorNode(connectorId, lastNode.Id)
+                    second.Value,
+                    JoinMember.ConnectorNode(connectorId, lastNode.Id)
                 }));
         }
 

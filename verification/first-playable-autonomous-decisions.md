@@ -105,3 +105,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Use the template's Ultra level as Standard; (2) use its Medium level as Standard and disable VSync for the accepted uncapped measurement.
 
 **Recommendation adopted:** Option 2 keeps the first-playable visuals readable while giving the 1,000-gate scene a realistic baseline. The concrete options and required reporting are recorded in [performance and platforms](../docs/performance-and-platforms.md#benchmark). A measured failure still requires optimization or an explicitly approved criterion revision.
+
+## 5 October 2026 — Visible open wire for output inspection
+
+**Issue:** The professor check explicitly targets the AND Y connector, but the initial two-pin shortcut could only end at another pin or an existing connector node. A bare AND output could be inspected only at its pin, leaving no Y connector to target.
+
+**Options:** (1) Add an unrelated sink component solely to terminate Y; (2) allow a wire started at a free pin to end at an empty floor-referenced cell as an open, selectable route.
+
+**Recommendation adopted:** Option 2 directly supports the specified inspection without changing electrical connectivity rules. The route has one explicit pin join and a physically open end. Recorded in [default controls](../docs/building-and-interface.md#default-controls).

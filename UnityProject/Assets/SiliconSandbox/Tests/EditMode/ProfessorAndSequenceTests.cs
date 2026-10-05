@@ -24,7 +24,8 @@ namespace SiliconSandbox.Tests.EditMode
             var gate = session.Design.Components[2];
             session.ConnectPins(Out(sourceA), Pin(gate, "A"));
             session.ConnectPins(Out(sourceB), Pin(gate, "B"));
-            Assert.That(session.Design.Topology.Connectors.Count, Is.EqualTo(2));
+            session.PlaceWireStub(Pin(gate, "Y"), new GridCell(8, 1, 6));
+            Assert.That(session.Design.Topology.Connectors.Count, Is.EqualTo(3));
             Assert.That(session.Scheduler.ClockRunning, Is.False);
             session.ToggleSource(sourceA.Id);
             session.ToggleSource(sourceB.Id);
@@ -46,7 +47,8 @@ namespace SiliconSandbox.Tests.EditMode
             {
                 Out(sourceB), Pin(gate, "B")
             }));
-            var y = session.Inspector.InspectPin(gate.Id, gate.PinIds["Y"]);
+            var y = session.Inspector.InspectConnector(
+                session.Design.Topology.Connectors[2].Id);
             Assert.That(y.Value, Is.EqualTo(LogicBit.X));
             Assert.That(y.Explanation, Does.Contain("input B is Z"));
             Assert.That(y.Explanation, Does.Not.Contain("Conflicting"));

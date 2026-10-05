@@ -10,6 +10,52 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class OneBitPinRoutePlannerTests
     {
         [Test]
+        public void GateOutputCanEndAtVisibleOpenWireAndRemainInspectable()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(
+                new WorldBounds(8, 8, 4)));
+            session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(3, 1, 3), GridOrientation.Default);
+            var gate = session.Design.Components[0];
+            var output = JoinMember.ComponentPin(gate.Id, gate.PinIds["Y"]);
+
+            session.PlaceWireStub(output, new GridCell(5, 1, 3));
+
+            var route = session.Design.Topology.Connectors[0];
+            Assert.That(session.Design.Topology.Joins.Count, Is.EqualTo(1));
+            Assert.That(route.Spans.Count, Is.GreaterThan(0));
+            Assert.That(route.Nodes[route.Nodes.Count - 1].Cell,
+                Is.EqualTo(new GridCell(5, 1, 3)));
+            Assert.That(route.Nodes[route.Nodes.Count - 1].PointQ,
+                Is.EqualTo(new QuarterPoint(2, 2, 2)));
+            Assert.That(session.Built.Graph.Connected(output,
+                JoinMember.ConnectorNode(route.Id,
+                    route.Nodes[route.Nodes.Count - 1].Id)), Is.True);
+            Assert.That(session.Inspector.InspectConnector(route.Id).Value,
+                Is.EqualTo(LogicBit.X),
+                "Two released AND inputs make an uncertain, inspectable Y net.");
+        }
+
+        [Test]
+        public void OpenWireTargetInsideOccupiedCellRejectsAtomically()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(
+                new WorldBounds(8, 8, 4)));
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(2, 1, 2), GridOrientation.Default);
+            session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(4, 1, 2), GridOrientation.Default);
+            var source = session.Design.Components[0];
+            var before = session.Design;
+            var revision = session.Revision;
+            Assert.Throws<ArgumentException>(() => session.PlaceWireStub(
+                JoinMember.ComponentPin(source.Id, source.PinIds["OUT"]),
+                new GridCell(4, 1, 2)));
+            Assert.That(session.Design, Is.SameAs(before));
+            Assert.That(session.Revision, Is.EqualTo(revision));
+        }
+
+        [Test]
         public void TwoTargetWirePublishesExplicitJoinsAndSettledAndInput()
         {
             var session = new OneBitWorldSession(OneBitWorldDesign.Empty(
