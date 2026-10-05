@@ -102,6 +102,11 @@ namespace SiliconSandbox.Interaction
             TargetAtCrosshair();
             UpdateGhost();
 
+            if (Input.GetKeyDown(KeyCode.U))
+                TryEdit(() => { if (!session.TryUndo()) InvalidAction(); });
+            if (Input.GetKeyDown(KeyCode.J))
+                TryEdit(() => { if (!session.TryRedo()) InvalidAction(); });
+
             if (Input.GetKeyDown(KeyCode.P))
             {
                 if (session.Scheduler.ClockRunning) session.Scheduler.StopClock();

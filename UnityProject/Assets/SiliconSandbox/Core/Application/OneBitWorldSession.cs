@@ -11,6 +11,18 @@ namespace SiliconSandbox.Application
     // subscribe to successful revision changes; they never own the circuit.
     public sealed class OneBitWorldSession
     {
+        private sealed class HistoryEntry
+        {
+            public OneBitWorldDesign Design { get; }
+            public DateTimeOffset RecordedAt { get; }
+            public HistoryEntry(OneBitWorldDesign design, DateTimeOffset recordedAt)
+            { Design = design; RecordedAt = recordedAt; }
+        }
+
+        private readonly Func<DateTimeOffset> wallClock;
+        private readonly List<HistoryEntry> undo = new List<HistoryEntry>();
+        private readonly List<HistoryEntry> redo = new List<HistoryEntry>();
+        private static readonly TimeSpan HistoryWindow = TimeSpan.FromMinutes(5);
         private Dictionary<Guid, OneBitModuleVersion> versions;
         public OneBitWorldDesign Design { get; private set; }
         public BuiltOneBitCircuitPlan Built { get; private set; }
@@ -24,9 +36,11 @@ namespace SiliconSandbox.Application
                 OneBitModuleVersion>(versions);
 
         public OneBitWorldSession(OneBitWorldDesign design, string frequencyHz = "10",
-            IReadOnlyDictionary<Guid, OneBitModuleVersion> moduleVersions = null)
+            IReadOnlyDictionary<Guid, OneBitModuleVersion> moduleVersions = null,
+            Func<DateTimeOffset> utcNow = null)
         {
             Design = design ?? throw new ArgumentNullException(nameof(design));
+            wallClock = utcNow ?? (() => DateTimeOffset.UtcNow);
             versions = moduleVersions == null
                 ? new Dictionary<Guid, OneBitModuleVersion>()
                 : new Dictionary<Guid, OneBitModuleVersion>(moduleVersions);
@@ -117,6 +131,7 @@ namespace SiliconSandbox.Application
             var nextRevision = checked(Revision + 1);
             var built = Build(candidate, versions);
             Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
+            RecordEdit();
             Design = candidate;
             Built = built;
             Inspector = MakeInspector(candidate, built, Circuit);
@@ -136,6 +151,42 @@ namespace SiliconSandbox.Application
                 Scheduler.QueueSourceChange(sourceId, nextOn, Scheduler.Now);
                 Scheduler.AdvanceUntil(Scheduler.Now);
             }
+        }
+
+        public bool TryUndo()
+        {
+            PruneHistory();
+            if (undo.Count == 0) return false;
+            SafePause();
+            var previous = undo[undo.Count - 1];
+            var built = Build(previous.Design, versions);
+            var nextRevision = checked(Revision + 1);
+            Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
+            undo.RemoveAt(undo.Count - 1);
+            redo.Add(new HistoryEntry(Design, wallClock()));
+            Design = previous.Design;
+            Built = built;
+            Inspector = MakeInspector(Design, built, Circuit);
+            Revision = nextRevision;
+            return true;
+        }
+
+        public bool TryRedo()
+        {
+            PruneHistory();
+            if (redo.Count == 0) return false;
+            SafePause();
+            var next = redo[redo.Count - 1];
+            var built = Build(next.Design, versions);
+            var nextRevision = checked(Revision + 1);
+            Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
+            redo.RemoveAt(redo.Count - 1);
+            undo.Add(new HistoryEntry(Design, wallClock()));
+            Design = next.Design;
+            Built = built;
+            Inspector = MakeInspector(Design, built, Circuit);
+            Revision = nextRevision;
+            return true;
         }
 
         private void SafePause()
@@ -158,11 +209,26 @@ namespace SiliconSandbox.Application
             }
             var built = Build(candidate, nextVersions);
             Circuit.ReplacePlan(built.Plan);
+            RecordEdit();
             versions = nextVersions;
             Design = candidate;
             Built = built;
             Inspector = MakeInspector(candidate, built, Circuit);
             Revision = nextRevision;
+        }
+
+        private void RecordEdit()
+        {
+            PruneHistory();
+            undo.Add(new HistoryEntry(Design, wallClock()));
+            redo.Clear();
+        }
+
+        private void PruneHistory()
+        {
+            var now = wallClock();
+            undo.RemoveAll(item => now - item.RecordedAt > HistoryWindow);
+            redo.RemoveAll(item => now - item.RecordedAt > HistoryWindow);
         }
 
         private static BuiltOneBitCircuitPlan Build(OneBitWorldDesign design,
