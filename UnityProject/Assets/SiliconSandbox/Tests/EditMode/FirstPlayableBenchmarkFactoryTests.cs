@@ -10,6 +10,25 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class FirstPlayableBenchmarkFactoryTests
     {
         [Test]
+        public void ReferenceWorldUsesRepeatableAuthoredIdentities()
+        {
+            var first = FirstPlayableBenchmarkFactory.Create();
+            var second = FirstPlayableBenchmarkFactory.Create();
+            Assert.That(first.FirstWorldGateId.ToString("D"),
+                Is.EqualTo("696c6953-6f63-426e-8000-000000000001"));
+            Assert.That(second.FirstWorldGateId, Is.EqualTo(first.FirstWorldGateId));
+            Assert.That(second.Version.VersionId, Is.EqualTo(first.Version.VersionId));
+            Assert.That(second.FirstModuleInstanceId,
+                Is.EqualTo(first.FirstModuleInstanceId));
+            for (var i = 0; i < first.World.Components.Count; i++)
+                Assert.That(second.World.Components[i].Id,
+                    Is.EqualTo(first.World.Components[i].Id));
+            for (var i = 0; i < first.World.Topology.Connectors.Count; i++)
+                Assert.That(second.World.Topology.Connectors[i].Id,
+                    Is.EqualTo(first.World.Topology.Connectors[i].Id));
+        }
+
+        [Test]
         public void FixedMixedReferenceContainsExactlyOneThousandLiveAndOperations()
         {
             var fixture = FirstPlayableBenchmarkFactory.Create();
