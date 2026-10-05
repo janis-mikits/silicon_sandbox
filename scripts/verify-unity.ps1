@@ -52,4 +52,23 @@ try {
 } finally {
     Remove-Item Env:SILICON_SANDBOX_SMOKE_OUTPUT -ErrorAction SilentlyContinue
 }
-Write-Output 'Unity Edit Mode, Play Mode, Windows build and player checks passed.'
+$storageSmoke = Join-Path $logs 'persistence-smoke'
+New-Item -ItemType Directory -Path $storageSmoke -Force | Out-Null
+$resultPath = Join-Path $storageSmoke 'result.txt'
+Set-Content -Path $resultPath -Value '' -NoNewline
+$env:SILICON_SANDBOX_PERSISTENCE_SMOKE_OUTPUT = $resultPath
+try {
+    & $player -batchmode -nographics -logFile (Join-Path $logs 'persistence-player.log')
+    if ($LASTEXITCODE -ne 0) { throw "Persistence player exited with code $LASTEXITCODE" }
+    $result = (Get-Content $resultPath -Raw).Trim() -split ' ', 2
+    if ($result.Count -ne 2 -or $result[0] -ne 'PASS') { throw 'Built-player save/reopen check failed.' }
+    $worldId = $result[1]
+    $worldPath = Join-Path $storageSmoke ("worlds/$worldId.ssworld")
+    if (-not (Test-Path $worldPath -PathType Leaf)) { throw 'Built-player world archive is missing.' }
+    $autosaveDirectory = Join-Path $storageSmoke ("worlds/autosaves/$worldId")
+    $autosave = Get-ChildItem -Path $autosaveDirectory -Filter '*.ssworld' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $autosave) { throw 'Built-player normal-exit autosave is missing.' }
+} finally {
+    Remove-Item Env:SILICON_SANDBOX_PERSISTENCE_SMOKE_OUTPUT -ErrorAction SilentlyContinue
+}
+Write-Output 'Unity Edit Mode, Play Mode, Windows build, player startup, save/reopen, and exit-autosave checks passed.'
