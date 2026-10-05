@@ -139,11 +139,49 @@ namespace SiliconSandbox.Authoring
                     throw new ArgumentException("Topology pin position disagrees with type/orientation.");
             }
             foreach (var route in topology.Connectors)
+            {
+                var routeNodes = new Dictionary<Guid, RouteNode>();
                 foreach (var node in route.Nodes)
-                    if (!bounds.ContainsPlaceable(node.Cell) || occupied.Contains(node.Cell))
-                        throw new ArgumentException("Connector route leaves bounds or overlaps a component cell.");
+                {
+                    if (!bounds.ContainsPlaceable(node.Cell))
+                        throw new ArgumentException("Connector route leaves world bounds.");
+                    routeNodes.Add(node.Id, node);
+                    if (occupied.Contains(node.Cell) &&
+                        !IsAttachedComponentFaceNode(topology, route.Id, node))
+                        throw new ArgumentException("A connector in a component cell must attach at its exact pin face.");
+                }
+                foreach (var span in route.Spans)
+                    if (routeNodes.TryGetValue(span.FromNodeId, out var from) &&
+                        routeNodes.TryGetValue(span.ToNodeId, out var to) &&
+                        from.Cell.Equals(to.Cell) && occupied.Contains(from.Cell))
+                        throw new ArgumentException("Connector spans cannot cross a component interior.");
+            }
             Components = objects.AsReadOnly();
             Topology = topology;
+        }
+
+        private static bool IsAttachedComponentFaceNode(OneBitAuthoredTopology topology,
+            Guid connectorId, RouteNode node)
+        {
+            var nodeRef = JoinMember.ConnectorNode(connectorId, node.Id);
+            foreach (var pin in topology.Pins)
+            {
+                if (!pin.Cell.Equals(node.Cell) || !pin.PointQ.Equals(node.PointQ))
+                    continue;
+                var pinRef = JoinMember.ComponentPin(pin.ObjectId, pin.PinId);
+                foreach (var join in topology.Joins)
+                {
+                    var hasNode = false;
+                    var hasPin = false;
+                    foreach (var member in join.Members)
+                    {
+                        if (member.Equals(nodeRef)) hasNode = true;
+                        if (member.Equals(pinRef)) hasPin = true;
+                    }
+                    if (hasNode && hasPin) return true;
+                }
+            }
+            return false;
         }
 
         public static OneBitWorldDesign Empty(WorldBounds bounds) =>

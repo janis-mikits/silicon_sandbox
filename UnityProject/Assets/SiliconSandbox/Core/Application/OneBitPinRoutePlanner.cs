@@ -44,6 +44,14 @@ namespace SiliconSandbox.Application
                     if (member.Equals(first) || member.Equals(second))
                         throw new ArgumentException("A selected pin already has a connector.");
 
+            if (SameWorldPoint(firstPin, secondPin))
+            {
+                var proposal = DirectFaceBridge(design, first, firstPin,
+                    second, secondPin);
+                OneBitWorldEdits.PlaceConnector(design, proposal.Route, proposal.Joins);
+                return proposal;
+            }
+
             var firstFace = Face(firstPin.PointQ);
             var secondFace = Face(secondPin.PointQ);
             var start = Move(firstPin.Cell, firstFace);
@@ -67,6 +75,48 @@ namespace SiliconSandbox.Application
             }
             throw new ArgumentException("No free one-bit connector route or channel.");
         }
+
+        private static OneBitPinRouteProposal DirectFaceBridge(
+            OneBitWorldDesign design, JoinMember first, AuthoredPin firstPin,
+            JoinMember second, AuthoredPin secondPin)
+        {
+            if (firstPin.Cell.Equals(secondPin.Cell))
+                throw new ArgumentException("Distinct pins in one component cannot share a face point.");
+            for (var channel = 0; channel < 4; channel++)
+            {
+                var available = true;
+                foreach (var existingRoute in design.Topology.Connectors)
+                    foreach (var node in existingRoute.Nodes)
+                        if (node.Channel == channel &&
+                            (node.Cell.Equals(firstPin.Cell) ||
+                             node.Cell.Equals(secondPin.Cell)))
+                            available = false;
+                if (!available) continue;
+                var firstNode = new RouteNode(Guid.NewGuid(), firstPin.Cell,
+                    channel, firstPin.PointQ);
+                var secondNode = new RouteNode(Guid.NewGuid(), secondPin.Cell,
+                    channel, secondPin.PointQ);
+                var routeId = Guid.NewGuid();
+                var route = new ConnectorRoute(routeId, "wire", 1,
+                    new[] { firstNode, secondNode },
+                    new[] { new RouteSpan(Guid.NewGuid(), firstNode.Id, secondNode.Id) });
+                return new OneBitPinRouteProposal(route,
+                    new ElectricalJoin(Guid.NewGuid(), new[]
+                    {
+                        first, JoinMember.ConnectorNode(routeId, firstNode.Id)
+                    }),
+                    new ElectricalJoin(Guid.NewGuid(), new[]
+                    {
+                        second, JoinMember.ConnectorNode(routeId, secondNode.Id)
+                    }));
+            }
+            throw new ArgumentException("No free channel on the shared component face.");
+        }
+
+        private static bool SameWorldPoint(AuthoredPin first, AuthoredPin second) =>
+            first.Cell.X * 4L + first.PointQ.X == second.Cell.X * 4L + second.PointQ.X &&
+            first.Cell.Y * 4L + first.PointQ.Y == second.Cell.Y * 4L + second.PointQ.Y &&
+            first.Cell.Z * 4L + first.PointQ.Z == second.Cell.Z * 4L + second.PointQ.Z;
 
         private static OneBitPinRouteProposal Build(IReadOnlyList<GridCell> path,
             int channel, JoinMember first, AuthoredPin firstPin,

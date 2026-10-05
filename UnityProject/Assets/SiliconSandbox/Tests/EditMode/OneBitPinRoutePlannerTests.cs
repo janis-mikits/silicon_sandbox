@@ -58,6 +58,54 @@ namespace SiliconSandbox.Tests.EditMode
         }
 
         [Test]
+        public void AdjacentMatchingPinsNeedAVisibleExplicitFaceBridge()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(
+                new WorldBounds(5, 3, 3)));
+            session.PlaceComponent(BuiltInPinCatalog.Source, new GridCell(1, 1, 1),
+                GridOrientation.Default);
+            session.PlaceComponent(BuiltInPinCatalog.And, new GridCell(2, 1, 1),
+                GridOrientation.Default);
+            var source = session.Design.Components[0];
+            var gate = session.Design.Components[1];
+            var output = JoinMember.ComponentPin(source.Id, source.PinIds["OUT"]);
+            var input = JoinMember.ComponentPin(gate.Id, gate.PinIds["A"]);
+            Assert.That(session.Built.Graph.Connected(output, input), Is.False,
+                "Touching component pins never connect by proximity.");
+
+            session.ConnectPins(output, input);
+            var bridge = session.Design.Topology.Connectors[0];
+            Assert.That(bridge.Nodes.Count, Is.EqualTo(2));
+            Assert.That(bridge.Spans.Count, Is.EqualTo(1));
+            Assert.That(bridge.Nodes[0].Cell, Is.EqualTo(source.AnchorCell));
+            Assert.That(bridge.Nodes[1].Cell, Is.EqualTo(gate.AnchorCell));
+            Assert.That(session.Built.Graph.Connected(output, input), Is.True);
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(input)).Value,
+                Is.EqualTo(LogicBit.Zero));
+
+            session.BreakSpan(bridge.Id, bridge.Spans[0].Id);
+            Assert.That(session.Built.Graph.Connected(output, input), Is.False);
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(input)).Value,
+                Is.EqualTo(LogicBit.Z));
+        }
+
+        [Test]
+        public void NodeInsideComponentCellWithoutExactPinJoinIsRejected()
+        {
+            var world = OneBitWorldEdits.PlaceComponent(
+                OneBitWorldDesign.Empty(new WorldBounds(5, 3, 3)),
+                BuiltInPinCatalog.Source, new GridCell(1, 1, 1),
+                GridOrientation.Default);
+            var unjoinedNode = new RouteNode(Guid.NewGuid(),
+                world.Components[0].AnchorCell, 0, new QuarterPoint(4, 1, 1));
+            var route = new ConnectorRoute(Guid.NewGuid(), "wire", 1,
+                new[] { unjoinedNode }, Array.Empty<RouteSpan>());
+            Assert.Throws<ArgumentException>(() => OneBitWorldEdits.PlaceConnector(
+                world, route, Array.Empty<ElectricalJoin>()));
+            Assert.That(world.Topology.Connectors.Count, Is.EqualTo(0));
+        }
+
+        [Test]
         public void AllFourChannelsBlockedRejectsWithoutPublishing()
         {
             var world = OneBitWorldDesign.Empty(new WorldBounds(3, 1, 2));

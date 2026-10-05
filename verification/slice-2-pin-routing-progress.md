@@ -10,11 +10,15 @@ determine connectivity. A blocked path leaves the design and revision
 unchanged.
 
 The new NUnit cases expect a source-to-AND route to settle A = 0, expect a
-visible in-cell quadrant shift from source OUT to SR R, and expect a
-four-channel blocked corridor to reject without a partial edit. The route
-planner does not yet handle adjacent component pins with no free routing
-cell, branching to an existing connector, or the full freeform player
-interface. Those remain slice 2 work.
+visible in-cell quadrant shift from source OUT to SR R, expect a
+four-channel blocked corridor to reject without a partial edit, verify an
+adjacent face bridge connects only after explicit placement, and reject a
+connector node hidden inside a component cell without its pin join. The route
+planner now also builds an explicit short face bridge for aligned adjacent
+pins; mere physical contact still leaves them disconnected. A route node may
+occupy a component cell only at an exact attached pin face, and no span may
+cross that component's interior. Branching to an existing connector and the
+full freeform player interface remain slice 2 work.
 
 Executed with the approved offline .NET SDK, no downloads, and temporary CLI
 home, package cache, and projects under `UnityProject/Temp/OfflineVerification`:
@@ -26,7 +30,9 @@ DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FI
 
 Both exited 0. The core harness included `PASS: two-pin route with exact
 quadrant shift and explicit joins`. The offline NUnit harness executed 102
-pure Edit Mode cases with 0 failures; it excludes the Unity Editor scene
+pure Edit Mode cases with 0 failures at that stage; after adding adjacent
+face-bridge and invalid face-node cases, the same offline runner executed
+104 cases with 0 failures. It excludes the Unity Editor scene
 test. It compiled existing Unity presentation code against the installed
 Editor reference assemblies and exposed an older NUnit collection assertion
 that did not compile; the assertion now checks both replacement IDs directly.
