@@ -11,6 +11,60 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class GraphDrivenSrIntegrationTests
     {
         [Test]
+        public void ExhaustedFeedbackGuardPausesAndMarksOnlyAffectedConeUnknown()
+        {
+            var set = Guid.NewGuid(); var reset = Guid.NewGuid();
+            var unrelated = Guid.NewGuid(); var first = Guid.NewGuid();
+            var second = Guid.NewGuid();
+            var sources = new[]
+            {
+                new SourceBinding(set, 0, LogicBit.One, true),
+                new SourceBinding(reset, 1, LogicBit.One, false),
+                new SourceBinding(unrelated, 7, LogicBit.One, true)
+            };
+            var clock = new WorldClockBinding(Guid.NewGuid(), Guid.NewGuid(), 2);
+            var firstBinding = Sr(first, 0, 1, 2, 3, 4, LogicBit.Zero);
+            var secondBinding = Sr(second, 0, 1, 3, 5, 6, LogicBit.Zero);
+            var plan = new OneBitCircuitPlan(8, sources,
+                Array.Empty<AndBinding>(),
+                new[] { firstBinding, secondBinding }, clock);
+            var normal = new GraphDrivenOneBitCircuit(plan);
+            normal.SetWorldClockLevel(LogicBit.One);
+            normal.AdvanceToSettled();
+            Assert.That(normal.Net(3).Value, Is.EqualTo(LogicBit.One));
+            Assert.That(normal.Net(5).Value, Is.EqualTo(LogicBit.One),
+                "The normal guard permits this finite two-pass cascade.");
+
+            var circuit = new GraphDrivenOneBitCircuit(plan);
+            var scheduler = new WorldSimulationScheduler(circuit);
+            Assert.That(circuit.Net(7).Value, Is.EqualTo(LogicBit.One));
+
+            circuit.SetWorldClockLevel(LogicBit.One);
+            circuit.AdvanceToSettled(1);
+            scheduler.RefreshCircuitDiagnostic();
+            Assert.That(scheduler.IsPaused, Is.True);
+            Assert.That(scheduler.Diagnostic, Does.Contain("non-converging feedback"));
+            Assert.That(circuit.Net(3).Value, Is.EqualTo(LogicBit.X));
+            Assert.That(circuit.Net(5).Value, Is.EqualTo(LogicBit.X),
+                "The downstream storage output depends on the unfinished edge.");
+            Assert.That(circuit.Net(7).Value, Is.EqualTo(LogicBit.One),
+                "An unrelated settled source retains its known value.");
+            Assert.Throws<InvalidOperationException>(() => scheduler.ResumeSimulation());
+
+            var corrected = new OneBitCircuitPlan(8, sources,
+                Array.Empty<AndBinding>(), new[] { firstBinding }, clock);
+            circuit.ReplacePlan(corrected);
+            scheduler.RefreshCircuitDiagnostic();
+            Assert.That(scheduler.Diagnostic, Is.Null);
+            Assert.That(scheduler.IsPaused, Is.True,
+                "Correction must not silently restart time advancement.");
+            Assert.That(circuit.Net(3).Value, Is.EqualTo(LogicBit.One));
+            scheduler.ResetSimulation();
+            Assert.That(scheduler.Diagnostic, Is.Null);
+            Assert.That(circuit.Net(3).Value, Is.EqualTo(LogicBit.Zero));
+        }
+
+        [Test]
         public void VersionOneSrPinsProjectToFiveDistinctUndrivenNets()
         {
             var id = Guid.NewGuid();

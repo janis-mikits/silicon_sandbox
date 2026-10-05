@@ -46,6 +46,13 @@ namespace SiliconSandbox.Simulation
             Recompute();
         }
 
+        // A nonsettling slot has no trustworthy resolved value. The circuit
+        // freezes propagation until a corrected plan or reset replaces us.
+        internal void MarkConvergenceUnknown()
+        {
+            Resolution = new ResolvedBit(LogicBit.X, ResolutionCause.UnknownDriver);
+        }
+
         private void Recompute()
         {
             var values = new LogicBit[drivers.Count];

@@ -19,6 +19,12 @@ namespace SiliconSandbox.Simulation
         private bool initializing;
         private HashSet<RuntimeObjectKey> newStorageIds;
         private LogicBit worldClockLevel;
+        private HashSet<int> changedDuringSettle;
+        private readonly List<int> convergenceAffectedNets = new List<int>();
+
+        public string ConvergenceDiagnostic { get; private set; }
+        public IReadOnlyList<int> ConvergenceAffectedNets =>
+            convergenceAffectedNets.AsReadOnly();
 
         public GraphDrivenOneBitCircuit(OneBitCircuitPlan initialPlan)
             : this(initialPlan, null, null, LogicBit.Zero, false) { }
@@ -95,6 +101,7 @@ namespace SiliconSandbox.Simulation
 
         public void SetWorldClockLevel(LogicBit level)
         {
+            RequireHealthy();
             if (level != LogicBit.Zero && level != LogicBit.One)
                 throw new ArgumentOutOfRangeException(nameof(level));
             worldClockLevel = level;
@@ -106,6 +113,7 @@ namespace SiliconSandbox.Simulation
 
         public void SetSourceOn(RuntimeObjectKey key, bool on)
         {
+            RequireHealthy();
             Source(key).SetOn(on);
             EnqueueSource(key);
         }
@@ -115,12 +123,14 @@ namespace SiliconSandbox.Simulation
 
         public void ConfigureSource(RuntimeObjectKey key, LogicBit onValue, bool initialOn)
         {
+            RequireHealthy();
             Source(key).Configure(onValue, initialOn);
             EnqueueSource(key);
         }
 
         public void ResetSources()
         {
+            RequireHealthy();
             foreach (var source in sources.Values) source.Reset();
             for (var i = 0; i < plan.Sources.Count; i++) pending.Enqueue((WorkKind.Source, i));
         }
@@ -164,11 +174,16 @@ namespace SiliconSandbox.Simulation
             initializing = candidate.initializing;
             newStorageIds = candidate.newStorageIds;
             worldClockLevel = candidate.worldClockLevel;
+            ConvergenceDiagnostic = candidate.ConvergenceDiagnostic;
+            convergenceAffectedNets.Clear();
+            convergenceAffectedNets.AddRange(candidate.convergenceAffectedNets);
         }
 
         public void AdvanceToSettled(int maximumDeltaPasses = 1024)
         {
             if (maximumDeltaPasses < 1) throw new ArgumentOutOfRangeException(nameof(maximumDeltaPasses));
+            if (ConvergenceDiagnostic != null) return;
+            changedDuringSettle = new HashSet<int>();
             for (var pass = 0; pass < maximumDeltaPasses; pass++)
             {
                 long evaluations = 0;
@@ -178,7 +193,10 @@ namespace SiliconSandbox.Simulation
                 while (pending.Count > 0)
                 {
                     if (++evaluations > limit)
-                        throw new InvalidOperationException("Combinational graph did not settle.");
+                    {
+                        MarkNonsettling();
+                        return;
+                    }
                     var work = pending.Dequeue();
                     switch (work.kind)
                     {
@@ -252,7 +270,64 @@ namespace SiliconSandbox.Simulation
                 for (var i = 0; i < plan.SrFlipFlops.Count; i++)
                     DriveStorageOutput(i);
             }
-            throw new InvalidOperationException("Feedback exceeded the delta-pass limit.");
+            MarkNonsettling();
+        }
+
+        private void MarkNonsettling()
+        {
+            var affected = new HashSet<int>(changedDuringSettle);
+            var search = new Queue<int>(affected);
+            foreach (var work in pending)
+            {
+                var output = WorkOutputNet(work);
+                if (output >= 0 && affected.Add(output)) search.Enqueue(output);
+            }
+            while (search.Count > 0)
+            {
+                var input = search.Dequeue();
+                foreach (var gateIndex in gatesByInput[input])
+                {
+                    var output = plan.AndGates[gateIndex].OutputY;
+                    if (affected.Add(output)) search.Enqueue(output);
+                }
+                foreach (var storageBinding in plan.SrFlipFlops)
+                {
+                    if (storageBinding.S != input && storageBinding.R != input &&
+                        storageBinding.Clock != input) continue;
+                    if (affected.Add(storageBinding.Q)) search.Enqueue(storageBinding.Q);
+                    if (affected.Add(storageBinding.QBar)) search.Enqueue(storageBinding.QBar);
+                }
+            }
+            convergenceAffectedNets.Clear();
+            convergenceAffectedNets.AddRange(affected);
+            convergenceAffectedNets.Sort();
+            foreach (var index in convergenceAffectedNets)
+                nets[index].MarkConvergenceUnknown();
+            pending.Clear();
+            changedDuringSettle = null;
+            ConvergenceDiagnostic =
+                "Zero-delay oscillation or non-converging feedback detected; " +
+                "affected signals are X. Edit the circuit or reset simulation.";
+        }
+
+        private int WorkOutputNet((WorkKind kind, int index) work)
+        {
+            switch (work.kind)
+            {
+                case WorkKind.Source: return plan.Sources[work.index].OutputNet;
+                case WorkKind.And: return plan.AndGates[work.index].OutputY;
+                case WorkKind.StorageOutput: return plan.SrFlipFlops[work.index].Q;
+                case WorkKind.WorldClock: return plan.WorldClock.Value.OutputNet;
+                case WorkKind.MissingModule:
+                    return plan.MissingModuleOutputs[work.index].OutputNet;
+                default: return -1;
+            }
+        }
+
+        private void RequireHealthy()
+        {
+            if (ConvergenceDiagnostic != null)
+                throw new InvalidOperationException(ConvergenceDiagnostic);
         }
 
         private void EnqueueSource(RuntimeObjectKey key)
@@ -269,6 +344,7 @@ namespace SiliconSandbox.Simulation
             var before = net.Resolution;
             net.SetDriver(driverId, value);
             if (before.Value == net.Resolution.Value && before.Cause == net.Resolution.Cause) return;
+            changedDuringSettle?.Add(netIndex);
             foreach (var gateIndex in gatesByInput[netIndex])
                 pending.Enqueue((WorkKind.And, gateIndex));
         }

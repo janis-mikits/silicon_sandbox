@@ -43,6 +43,21 @@ namespace SiliconSandbox.Simulation
             FrequencyHz = frequencyHz;
             if (circuit.WorldClockLevel != LogicBit.Zero)
                 throw new ArgumentException("A new world clock must start at zero.");
+            RefreshCircuitDiagnostic();
+        }
+
+        // Structural edits can remove a feedback fault; keep the simulation
+        // paused until the player explicitly resumes the corrected circuit.
+        public void RefreshCircuitDiagnostic()
+        {
+            if (circuit.ConvergenceDiagnostic != null)
+            {
+                Diagnostic = circuit.ConvergenceDiagnostic;
+                IsPaused = true;
+            }
+            else if (Diagnostic != null && Diagnostic.StartsWith(
+                "Zero-delay oscillation or non-converging feedback", StringComparison.Ordinal))
+                Diagnostic = null;
         }
 
         public void QueueSourceChange(Guid objectId, bool on, SimulationTime when)
@@ -136,6 +151,7 @@ namespace SiliconSandbox.Simulation
                 }
                 circuit.AdvanceToSettled();
                 if (clockEdge) ScheduleAfterEdge();
+                RefreshCircuitDiagnostic();
                 if (IsPaused) return;
             }
             Now = target;
@@ -174,6 +190,7 @@ namespace SiliconSandbox.Simulation
             pendingFrequencyHz = null;
             sourceChanges.Clear();
             ClockEdgesProcessed = BigInteger.Zero;
+            RefreshCircuitDiagnostic();
         }
 
         private bool TryNextSlot(out SimulationTime slot)

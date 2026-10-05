@@ -178,6 +178,7 @@ namespace SiliconSandbox.Application
             var nextRevision = checked(Revision + 1);
             var built = Build(candidate, versions);
             Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
+            Scheduler.RefreshCircuitDiagnostic();
             RecordEdit();
             Design = candidate;
             Built = built;
@@ -209,6 +210,7 @@ namespace SiliconSandbox.Application
             var built = Build(previous.Design, versions);
             var nextRevision = checked(Revision + 1);
             Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
+            Scheduler.RefreshCircuitDiagnostic();
             undo.RemoveAt(undo.Count - 1);
             redo.Add(new HistoryEntry(Design, wallClock()));
             Design = previous.Design;
@@ -227,6 +229,7 @@ namespace SiliconSandbox.Application
             var built = Build(next.Design, versions);
             var nextRevision = checked(Revision + 1);
             Circuit.ReplacePlanWithAuthoredSourceConfiguration(built.Plan);
+            Scheduler.RefreshCircuitDiagnostic();
             redo.RemoveAt(redo.Count - 1);
             undo.Add(new HistoryEntry(Design, wallClock()));
             Design = next.Design;
@@ -256,6 +259,7 @@ namespace SiliconSandbox.Application
             }
             var built = Build(candidate, nextVersions);
             Circuit.ReplacePlan(built.Plan);
+            Scheduler.RefreshCircuitDiagnostic();
             RecordEdit();
             versions = nextVersions;
             Design = candidate;

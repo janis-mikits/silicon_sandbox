@@ -970,7 +970,15 @@ namespace SiliconSandbox.Interaction
                 player.SetInterfaceOpen(false);
                 return;
             }
-            if (session.Scheduler.IsPaused) session.Scheduler.ResumeSimulation();
+            if (session.Scheduler.IsPaused)
+            {
+                if (session.Scheduler.Diagnostic != null)
+                {
+                    pauseMenuOpen = true;
+                    player.SetInterfaceOpen(true);
+                }
+                else session.Scheduler.ResumeSimulation();
+            }
             else
             {
                 session.Scheduler.PauseSimulation();
@@ -982,6 +990,14 @@ namespace SiliconSandbox.Interaction
         private void OnGUI()
         {
             if (session == null) return;
+            if (session.Scheduler.Diagnostic != null)
+            {
+                var oldColor = GUI.color;
+                GUI.color = new Color(1f, 0.55f, 0.55f);
+                GUI.Box(new Rect(12f, 108f, Mathf.Min(Screen.width - 24f, 720f),
+                    58f), session.Scheduler.Diagnostic);
+                GUI.color = oldColor;
+            }
             if (hudVisible && packageDraft == null)
             {
                 GUI.Label(new Rect(Screen.width * 0.5f - 8f,
