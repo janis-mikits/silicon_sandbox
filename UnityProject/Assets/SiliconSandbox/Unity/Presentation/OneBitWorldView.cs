@@ -58,6 +58,8 @@ namespace SiliconSandbox.Presentation
 
             foreach (var component in session.Design.Components)
                 DrawComponent(component);
+            foreach (var module in session.Design.Modules)
+                DrawModule(module);
             foreach (var route in session.Design.Topology.Connectors)
                 DrawRoute(route);
             DrawJunctions();
@@ -95,6 +97,47 @@ namespace SiliconSandbox.Presentation
                     WorldPartKind.ComponentPin, component.Id, pin.PinId);
                 pinRenderers.Add(JoinMember.ComponentPin(component.Id, pin.PinId),
                     pinObject.GetComponent<Renderer>());
+            }
+        }
+
+        private void DrawModule(PlacedOneBitModuleInstance module)
+        {
+            var cells = module.OccupiedCells();
+            foreach (var cell in cells)
+            {
+                var body = Primitive("Module " + module.InstanceName,
+                    PrimitiveType.Cube, generatedRoot);
+                body.transform.position = new Vector3(cell.X + 0.5f,
+                    cell.Y + 0.5f, cell.Z + 0.5f);
+                body.transform.localScale = Vector3.one * 0.82f;
+                body.GetComponent<Renderer>().material.color =
+                    new Color(0.34f, 0.58f, 0.72f);
+                body.AddComponent<WorldSelectablePart>().Initialize(
+                    WorldPartKind.ModuleBody, module.Id, Guid.Empty);
+            }
+            if (cells.Count > 0)
+            {
+                var label = new GameObject("Module label " + module.InstanceName);
+                label.transform.SetParent(generatedRoot, false);
+                label.transform.position = new Vector3(cells[0].X + 0.5f,
+                    cells[0].Y + 1.05f, cells[0].Z + 0.5f);
+                var mesh = label.AddComponent<TextMesh>();
+                mesh.text = module.InstanceName;
+                mesh.anchor = TextAnchor.MiddleCenter;
+                mesh.characterSize = 0.22f;
+                mesh.fontSize = 48;
+                mesh.color = Color.black;
+            }
+            foreach (var port in module.BuildPortBits())
+            {
+                var marker = Primitive("Module port " + port.PortId.ToString("D"),
+                    PrimitiveType.Sphere, generatedRoot);
+                marker.transform.position = Position(port.Cell, port.PointQ);
+                marker.transform.localScale = Vector3.one * 0.22f;
+                marker.AddComponent<WorldSelectablePart>().Initialize(
+                    WorldPartKind.ModulePort, module.Id, port.PortId);
+                pinRenderers.Add(JoinMember.ModulePortBit(module.Id,
+                    port.PortId, port.BitIndex), marker.GetComponent<Renderer>());
             }
         }
 

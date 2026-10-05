@@ -21,6 +21,10 @@ instance path, and joins each placed CLK port to the world-clock signal through
 an explicit visible Net Link stub. This is simulation data, independent of
 rendering or camera visibility. Package publication, inventory/UI controls,
 durable saves, and missing-definition recovery are not implemented yet.
+The Unity presentation renders module footprints and exact port positions as
+targetable objects. The interaction shell can wire module ports, attach a
+world-clock stub to their CLK port, and inspect a port's settled value.
+These scene behaviors compile offline but have not run in Unity's Test Runner.
 
 Independent NUnit expectations cover fresh IDs and retained clock-stub
 connectivity; exclusion of an orphan route; exact endpoint for a connected

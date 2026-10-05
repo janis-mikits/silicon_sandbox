@@ -7,6 +7,8 @@ namespace SiliconSandbox.Presentation
     {
         ComponentBody,
         ComponentPin,
+        ModuleBody,
+        ModulePort,
         ConnectorNode,
         ConnectorSpan
     }

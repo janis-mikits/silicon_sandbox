@@ -11,8 +11,11 @@ namespace SiliconSandbox.Application
     {
         public JoinMember Pin { get; }
         public LogicBit Value { get; }
+        public RuntimeObjectKey? RuntimeKey { get; }
 
-        public InspectedDriver(JoinMember pin, LogicBit value) { Pin = pin; Value = value; }
+        public InspectedDriver(JoinMember pin, LogicBit value,
+            RuntimeObjectKey? runtimeKey = null)
+        { Pin = pin; Value = value; RuntimeKey = runtimeKey; }
     }
 
     public sealed class OneBitInspection

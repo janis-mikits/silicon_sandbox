@@ -163,12 +163,12 @@ namespace SiliconSandbox.Interaction
             {
                 if (!wireStart.HasValue)
                 {
-                    if (hovered == null || hovered.Kind != WorldPartKind.ComponentPin)
+                    if (hovered == null || !IsPinKind(hovered.Kind))
                     {
                         InvalidAction();
                         return;
                     }
-                    var pin = JoinMember.ComponentPin(hovered.OwnerId, hovered.PartId);
+                    var pin = PickedPin(hovered);
                     if (PinOccupied(pin)) { InvalidAction(); return; }
                     wireStart = pin;
                 }
@@ -176,9 +176,9 @@ namespace SiliconSandbox.Interaction
                 {
                     var start = wireStart.Value;
                     if (hovered == null) InvalidAction();
-                    else if (hovered.Kind == WorldPartKind.ComponentPin)
+                    else if (IsPinKind(hovered.Kind))
                     {
-                        var pin = JoinMember.ComponentPin(hovered.OwnerId, hovered.PartId);
+                        var pin = PickedPin(hovered);
                         TryEdit(() => session.ConnectPins(start, pin));
                     }
                     else if (hovered.Kind == WorldPartKind.ConnectorNode)
@@ -194,13 +194,16 @@ namespace SiliconSandbox.Interaction
             }
             if (selectedSlot == 4)
             {
-                if (hovered == null || hovered.Kind != WorldPartKind.ComponentPin ||
-                    !IsSrClockPin(hovered.OwnerId, hovered.PartId))
+                if (hovered == null || !IsPinKind(hovered.Kind) ||
+                    !IsClockTarget(hovered))
                 {
                     InvalidAction();
                     return;
                 }
-                TryEdit(() => session.AttachWorldClockPin(hovered.OwnerId));
+                if (hovered.Kind == WorldPartKind.ModulePort)
+                    TryEdit(() => session.AttachWorldClockPort(
+                        hovered.OwnerId, hovered.PartId));
+                else TryEdit(() => session.AttachWorldClockPin(hovered.OwnerId));
                 return;
             }
             var typeId = SelectedComponentType();
@@ -220,6 +223,28 @@ namespace SiliconSandbox.Interaction
             foreach (var join in session.Design.Topology.Joins)
                 foreach (var member in join.Members)
                     if (member.Equals(pin)) return true;
+            return false;
+        }
+
+        private static bool IsPinKind(WorldPartKind kind) =>
+            kind == WorldPartKind.ComponentPin ||
+            kind == WorldPartKind.ModulePort;
+
+        private static JoinMember PickedPin(WorldSelectablePart part) =>
+            part.Kind == WorldPartKind.ModulePort
+                ? JoinMember.ModulePortBit(part.OwnerId, part.PartId, 0)
+                : JoinMember.ComponentPin(part.OwnerId, part.PartId);
+
+        private bool IsClockTarget(WorldSelectablePart part)
+        {
+            if (part.Kind == WorldPartKind.ComponentPin)
+                return IsSrClockPin(part.OwnerId, part.PartId);
+            foreach (var module in session.Design.Modules)
+                if (module.Id == part.OwnerId)
+                    foreach (var port in module.InterfacePorts)
+                        if (port.Id == part.PartId)
+                            return port.Name == "CLK" &&
+                                port.Direction != OneBitPortDirection.Output;
             return false;
         }
 
@@ -467,6 +492,9 @@ namespace SiliconSandbox.Interaction
                     detail = session.Inspector.InspectConnector(hovered.OwnerId);
                 else if (hovered.Kind == WorldPartKind.ComponentPin)
                     detail = session.Inspector.InspectPin(hovered.OwnerId, hovered.PartId);
+                else if (hovered.Kind == WorldPartKind.ModulePort)
+                    detail = session.Inspector.InspectModulePort(
+                        hovered.OwnerId, hovered.PartId);
                 else return;
             }
             catch (KeyNotFoundException) { return; }
@@ -561,6 +589,9 @@ namespace SiliconSandbox.Interaction
                     detail = session.Inspector.InspectConnector(inspectedOwner);
                 else if (inspectedKind == WorldPartKind.ComponentPin)
                     detail = session.Inspector.InspectPin(inspectedOwner, inspectedPart);
+                else if (inspectedKind == WorldPartKind.ModulePort)
+                    detail = session.Inspector.InspectModulePort(
+                        inspectedOwner, inspectedPart);
                 else return;
             }
             catch (KeyNotFoundException) { inspectOpen = false; return; }
@@ -576,6 +607,12 @@ namespace SiliconSandbox.Interaction
 
         private string PinName(JoinMember pin)
         {
+            if (pin.Kind == JoinTargetKind.ModulePortBit)
+                foreach (var module in session.Design.Modules)
+                    if (module.Id == pin.OwnerId)
+                        foreach (var port in module.InterfacePorts)
+                            if (port.Id == pin.PartId)
+                                return module.InstanceName + "." + port.Name;
             foreach (var component in session.Design.Components)
                 if (component.Id == pin.OwnerId)
                     foreach (var pair in component.PinIds)

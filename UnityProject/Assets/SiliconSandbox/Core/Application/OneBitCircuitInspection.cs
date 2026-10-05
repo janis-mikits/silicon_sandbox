@@ -37,6 +37,9 @@ namespace SiliconSandbox.Application
         public OneBitInspection InspectPin(Guid objectId, Guid pinId) =>
             Inspect(JoinMember.ComponentPin(objectId, pinId));
 
+        public OneBitInspection InspectModulePort(Guid objectId, Guid portId) =>
+            Inspect(JoinMember.ModulePortBit(objectId, portId, 0));
+
         private OneBitInspection Inspect(JoinMember member)
         {
             var net = built.Graph.NetFor(member);
@@ -44,7 +47,8 @@ namespace SiliconSandbox.Application
             var resolved = circuit.Net(netIndex);
             var pins = new List<JoinMember>();
             foreach (var item in net.Members)
-                if (item.Kind == JoinTargetKind.ComponentPin) pins.Add(item);
+                if (item.Kind == JoinTargetKind.ComponentPin ||
+                    item.Kind == JoinTargetKind.ModulePortBit) pins.Add(item);
             var drivers = new List<InspectedDriver>();
             foreach (var component in components)
             {
@@ -61,6 +65,22 @@ namespace SiliconSandbox.Application
                     AddDriver(component, "Q", circuit.Storage(component.Id).Q);
                     AddDriver(component, "Q_bar", circuit.Storage(component.Id).QBar);
                 }
+            }
+            foreach (var storage in built.Plan.SrFlipFlops)
+            {
+                if (storage.RuntimeKey.VersionId == Guid.Empty) continue;
+                if (storage.Q == netIndex)
+                    drivers.Add(new InspectedDriver(
+                        JoinMember.ComponentPin(storage.ObjectId,
+                            storage.QDriverId),
+                        circuit.Storage(storage.RuntimeKey).Q,
+                        storage.RuntimeKey));
+                if (storage.QBar == netIndex)
+                    drivers.Add(new InspectedDriver(
+                        JoinMember.ComponentPin(storage.ObjectId,
+                            storage.QBarDriverId),
+                        circuit.Storage(storage.RuntimeKey).QBar,
+                        storage.RuntimeKey));
             }
             if (built.Plan.WorldClock.HasValue &&
                 built.Plan.WorldClock.Value.OutputNet == netIndex)

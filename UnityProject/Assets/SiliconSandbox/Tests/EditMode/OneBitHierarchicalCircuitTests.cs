@@ -69,6 +69,16 @@ namespace SiliconSandbox.Tests.EditMode
             session.Scheduler.StepClockEdge(); // Falling.
             session.Scheduler.StepClockEdge(); // Third rising.
             AssertState(LogicBit.Zero, LogicBit.Zero);
+            var inspectedA = session.Inspector.InspectModulePort(a.Id, qPort);
+            var inspectedB = session.Inspector.InspectModulePort(b.Id, qPort);
+            Assert.That(inspectedA.Value, Is.EqualTo(LogicBit.Zero));
+            Assert.That(inspectedB.Value, Is.EqualTo(LogicBit.Zero));
+            Assert.That(inspectedA.ActiveDrivers.Count, Is.EqualTo(1));
+            Assert.That(inspectedA.ActiveDrivers[0].RuntimeKey,
+                Is.EqualTo(aKey));
+            Assert.That(inspectedB.ActiveDrivers.Count, Is.EqualTo(1));
+            Assert.That(inspectedB.ActiveDrivers[0].RuntimeKey,
+                Is.EqualTo(bKey));
 
             void AssertState(LogicBit expectedA, LogicBit expectedB)
             {
