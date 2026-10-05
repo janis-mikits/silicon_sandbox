@@ -15,7 +15,7 @@ namespace SiliconSandbox.Interaction
         private const float ReachCells = 15f;
         private static readonly string[] Hotbar =
         {
-            "Source", "Wire", "AND", "SR", "", "", "", "", ""
+            "Source", "Wire", "AND", "SR", "Clock Link", "", "", "", ""
         };
 
         private OneBitWorldSession session;
@@ -178,6 +178,17 @@ namespace SiliconSandbox.Interaction
                     TryEdit(() => session.ConnectPins(start, pin));
                     wireStart = null;
                 }
+                return;
+            }
+            if (selectedSlot == 4)
+            {
+                if (hovered == null || hovered.Kind != WorldPartKind.ComponentPin ||
+                    !IsSrClockPin(hovered.OwnerId, hovered.PartId))
+                {
+                    InvalidAction();
+                    return;
+                }
+                TryEdit(() => session.AttachWorldClockPin(hovered.OwnerId));
                 return;
             }
             var typeId = SelectedComponentType();
@@ -347,6 +358,16 @@ namespace SiliconSandbox.Interaction
             foreach (var component in session.Design.Components)
                 if (component.Id == id)
                     return component.TypeId == BuiltInPinCatalog.Source;
+            return false;
+        }
+
+        private bool IsSrClockPin(Guid objectId, Guid pinId)
+        {
+            foreach (var component in session.Design.Components)
+                if (component.Id == objectId &&
+                    component.TypeId == BuiltInPinCatalog.SrFlipFlop &&
+                    component.PinIds["CLK"] == pinId)
+                    return true;
             return false;
         }
 

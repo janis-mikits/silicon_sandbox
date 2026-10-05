@@ -60,6 +60,12 @@ namespace SiliconSandbox.Application
                 proposal.Route, proposal.Joins));
         }
 
+        public void AttachWorldClockPin(Guid srObjectId)
+        {
+            SafePause();
+            Publish(OneBitWorldEdits.AttachWorldClockPin(Design, srObjectId));
+        }
+
         public void AddJoin(ElectricalJoin join, string chosenTag = null)
         {
             SafePause();

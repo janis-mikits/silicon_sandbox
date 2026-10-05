@@ -83,5 +83,92 @@ namespace SiliconSandbox.Application
             OneBitTopologyGraphBuilder.Build(candidate.Topology);
             return candidate;
         }
+
+        public static OneBitWorldDesign AttachWorldClockPin(
+            OneBitWorldDesign original, Guid srObjectId)
+        {
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            PlacedOneBitComponent sr = null;
+            foreach (var component in original.Components)
+                if (component.Id == srObjectId) { sr = component; break; }
+            if (sr == null || sr.TypeId != BuiltInPinCatalog.SrFlipFlop)
+                throw new ArgumentException("World-clock stub requires an SR CLK pin.");
+            var clockPinRef = JoinMember.ComponentPin(sr.Id, sr.PinIds["CLK"]);
+            foreach (var join in original.Topology.Joins)
+                foreach (var member in join.Members)
+                    if (member.Equals(clockPinRef))
+                        throw new ArgumentException("The CLK pin already has a connector.");
+            AuthoredPin clockPin = null;
+            foreach (var pin in original.Topology.Pins)
+                if (pin.ObjectId == sr.Id && pin.PinId == sr.PinIds["CLK"])
+                { clockPin = pin; break; }
+            if (clockPin == null) throw new ArgumentException("SR CLK pin is missing.");
+
+            var outside = AdjacentCell(clockPin);
+            var useOutside = original.Bounds.ContainsPlaceable(outside);
+            foreach (var component in original.Components)
+                if (component.AnchorCell.Equals(outside)) useOutside = false;
+            var stubCell = useOutside ? outside : clockPin.Cell;
+            var stubPoint = useOutside
+                ? OppositeFacePoint(clockPin.PointQ)
+                : clockPin.PointQ;
+            var channel = FreeChannel(original, stubCell);
+            if (channel < 0 && useOutside)
+            {
+                stubCell = clockPin.Cell;
+                stubPoint = clockPin.PointQ;
+                channel = FreeChannel(original, stubCell);
+            }
+            if (channel < 0)
+                throw new ArgumentException("No free channel for the world-clock stub.");
+
+            var node = new RouteNode(Guid.NewGuid(), stubCell, channel, stubPoint);
+            var route = new ConnectorRoute(Guid.NewGuid(), "netLink", 1,
+                new[] { node }, Array.Empty<RouteSpan>(), "",
+                null, "@world-clock", "world", "worldClock");
+            var joinToPin = new ElectricalJoin(Guid.NewGuid(), new[]
+            {
+                clockPinRef, JoinMember.ConnectorNode(route.Id, node.Id)
+            });
+            return PlaceConnector(original, route, new[] { joinToPin });
+        }
+
+        private static int FreeChannel(OneBitWorldDesign design, GridCell cell)
+        {
+            for (var channel = 0; channel < 4; channel++)
+            {
+                var occupied = false;
+                foreach (var route in design.Topology.Connectors)
+                    foreach (var node in route.Nodes)
+                        if (node.Cell.Equals(cell) && node.Channel == channel)
+                            occupied = true;
+                if (!occupied) return channel;
+            }
+            return -1;
+        }
+
+        private static GridCell AdjacentCell(AuthoredPin pin)
+        {
+            var cell = pin.Cell;
+            var point = pin.PointQ;
+            if (point.X == 0) return new GridCell(cell.X - 1, cell.Y, cell.Z);
+            if (point.X == 4) return new GridCell(cell.X + 1, cell.Y, cell.Z);
+            if (point.Y == 0) return new GridCell(cell.X, cell.Y - 1, cell.Z);
+            if (point.Y == 4) return new GridCell(cell.X, cell.Y + 1, cell.Z);
+            if (point.Z == 0) return new GridCell(cell.X, cell.Y, cell.Z - 1);
+            if (point.Z == 4) return new GridCell(cell.X, cell.Y, cell.Z + 1);
+            throw new ArgumentException("CLK pin is not on a cell face.");
+        }
+
+        private static QuarterPoint OppositeFacePoint(QuarterPoint point)
+        {
+            if (point.X == 0) return new QuarterPoint(4, point.Y, point.Z);
+            if (point.X == 4) return new QuarterPoint(0, point.Y, point.Z);
+            if (point.Y == 0) return new QuarterPoint(point.X, 4, point.Z);
+            if (point.Y == 4) return new QuarterPoint(point.X, 0, point.Z);
+            if (point.Z == 0) return new QuarterPoint(point.X, point.Y, 4);
+            if (point.Z == 4) return new QuarterPoint(point.X, point.Y, 0);
+            throw new ArgumentException("CLK pin is not on a cell face.");
+        }
     }
 }

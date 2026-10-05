@@ -46,5 +46,31 @@ namespace SiliconSandbox.Tests.PlayMode
             Assert.That(bootstrap.Session.Design.Components[0].SourceInitialOn, Is.False,
                 "Live operation must not change saved startup configuration.");
         }
+
+        [UnityTest]
+        public IEnumerator WorldClockStubIsVisibleAndUpdatesAfterSettledStep()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            bootstrap.Session.PlaceComponent(BuiltInPinCatalog.SrFlipFlop,
+                new GridCell(6, 1, 6), GridOrientation.Default);
+            var sr = bootstrap.Session.Design.Components[0];
+            bootstrap.Session.AttachWorldClockPin(sr.Id);
+            yield return null;
+            var stub = bootstrap.Session.Design.Topology.Connectors[0];
+            var found = false;
+            foreach (var part in Object.FindObjectsByType<WorldSelectablePart>(
+                FindObjectsSortMode.None))
+                if (part.Kind == WorldPartKind.ConnectorNode && part.OwnerId == stub.Id)
+                    found = true;
+            Assert.That(found, Is.True);
+
+            bootstrap.Session.Scheduler.StepClockEdge();
+            var clockPin = bootstrap.Session.Inspector.InspectPin(
+                sr.Id, sr.PinIds["CLK"]);
+            Assert.That(clockPin.Value, Is.EqualTo(LogicBit.One));
+        }
     }
 }
