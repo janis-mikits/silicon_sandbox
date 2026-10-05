@@ -25,6 +25,10 @@ The Unity presentation renders module footprints and exact port positions as
 targetable objects. The interaction shell can wire module ports, attach a
 world-clock stub to their CLK port, and inspect a port's settled value.
 These scene behaviors compile offline but have not run in Unity's Test Runner.
+For a one-cell package, the draft port layout suggests all three SR inputs on
+one face and Q/Q_bar on the opposite face, retaining exact internal target
+references. The player-facing package configuration and durable confirmation
+remain to be built.
 
 Independent NUnit expectations cover fresh IDs and retained clock-stub
 connectivity; exclusion of an orphan route; exact endpoint for a connected
@@ -37,7 +41,7 @@ Offline repository-local NUnit command executed from the repository root:
 DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet
 ```
 
-Latest result: 119 passed, 0 failed, 0 ignored. The new independent test
+Latest result: 120 passed, 0 failed, 0 ignored. The new independent test
 checks the accepted three rising-edge SR sequence for two placed copies:
 1/X, 1/0, then 0/0, with four separate world sources. The Play Mode source compile
 also succeeded with zero warnings and zero errors using the same offline SDK
