@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Contracts;
+using SiliconSandbox.Graph;
 using UnityEngine;
 
 namespace SiliconSandbox.Presentation
@@ -59,6 +60,7 @@ namespace SiliconSandbox.Presentation
                 DrawComponent(component);
             foreach (var route in session.Design.Topology.Connectors)
                 DrawRoute(route);
+            DrawJunctions();
             shownRevision = session.Revision;
         }
 
@@ -110,7 +112,7 @@ namespace SiliconSandbox.Presentation
                 nodes.Add(node.Id, node);
                 var marker = Primitive("Node " + node.Id.ToString("D"),
                     PrimitiveType.Sphere, root.transform);
-                marker.transform.position = Position(node.Cell, node.PointQ);
+                marker.transform.position = RoutePosition(node);
                 marker.transform.localScale = Vector3.one * 0.16f;
                 marker.AddComponent<WorldSelectablePart>().Initialize(
                     WorldPartKind.ConnectorNode, route.Id, node.Id);
@@ -120,8 +122,8 @@ namespace SiliconSandbox.Presentation
                 DrawSpan(root.transform, route.Id, span,
                     nodes[span.FromNodeId], nodes[span.ToNodeId], renderers);
             var cap = Primitive("Identity cap", PrimitiveType.Sphere, root.transform);
-            cap.transform.position = Position(route.Nodes[0].Cell,
-                route.Nodes[0].PointQ) + Vector3.up * 0.15f;
+            cap.transform.position = RoutePosition(route.Nodes[0]) +
+                Vector3.up * 0.15f;
             cap.transform.localScale = Vector3.one * 0.09f;
             cap.GetComponent<Renderer>().material.color = IdentityColor(route);
             cap.AddComponent<WorldSelectablePart>().Initialize(
@@ -131,8 +133,8 @@ namespace SiliconSandbox.Presentation
         private static void DrawSpan(Transform root, Guid connectorId, RouteSpan span,
             RouteNode fromNode, RouteNode toNode, List<Renderer> renderers)
         {
-            var from = Position(fromNode.Cell, fromNode.PointQ);
-            var to = Position(toNode.Cell, toNode.PointQ);
+            var from = RoutePosition(fromNode);
+            var to = RoutePosition(toNode);
             if ((to - from).sqrMagnitude < 0.000001f)
             {
                 var bridge = Primitive("Face bridge " + span.Id.ToString("D"),
@@ -144,11 +146,66 @@ namespace SiliconSandbox.Presentation
                 renderers.Add(bridge.GetComponent<Renderer>());
                 return;
             }
+            if (fromNode.Cell.Equals(toNode.Cell) &&
+                (fromNode.PointQ.IsCenter && toNode.PointQ.IsFacePoint ||
+                 toNode.PointQ.IsCenter && fromNode.PointQ.IsFacePoint))
+            {
+                var center = fromNode.PointQ.IsCenter ? from : to;
+                var face = fromNode.PointQ.IsFacePoint ? from : to;
+                var facePoint = fromNode.PointQ.IsFacePoint
+                    ? fromNode.PointQ : toNode.PointQ;
+                DrawCenterToFace(root, connectorId, span.Id,
+                    center, face, facePoint, renderers);
+                return;
+            }
             var xBend = new Vector3(to.x, from.y, from.z);
             var yBend = new Vector3(to.x, to.y, from.z);
             DrawCylinder(root, connectorId, span.Id, from, xBend, renderers);
             DrawCylinder(root, connectorId, span.Id, xBend, yBend, renderers);
             DrawCylinder(root, connectorId, span.Id, yBend, to, renderers);
+        }
+
+        private static void DrawCenterToFace(Transform root, Guid connectorId,
+            Guid spanId, Vector3 center, Vector3 face, QuarterPoint facePoint,
+            List<Renderer> renderers)
+        {
+            Vector3 first;
+            Vector3 second;
+            if (facePoint.X == 0 || facePoint.X == 4)
+            {
+                first = new Vector3(face.x, center.y, center.z);
+                second = new Vector3(face.x, face.y, center.z);
+            }
+            else if (facePoint.Y == 0 || facePoint.Y == 4)
+            {
+                first = new Vector3(center.x, face.y, center.z);
+                second = new Vector3(face.x, face.y, center.z);
+            }
+            else
+            {
+                first = new Vector3(center.x, center.y, face.z);
+                second = new Vector3(face.x, center.y, face.z);
+            }
+            DrawCylinder(root, connectorId, spanId, center, first, renderers);
+            DrawCylinder(root, connectorId, spanId, first, second, renderers);
+            DrawCylinder(root, connectorId, spanId, second, face, renderers);
+        }
+
+        private void DrawJunctions()
+        {
+            foreach (var junction in OneBitVisualTopology.Junctions(
+                session.Design.Topology))
+            {
+                var marker = Primitive("Junction " + junction.NodeId.ToString("D"),
+                    PrimitiveType.Sphere, generatedRoot);
+                marker.transform.position = RoutePosition(junction.Cell,
+                    junction.PointQ, junction.Channel);
+                marker.transform.localScale = Vector3.one * 0.34f;
+                marker.AddComponent<WorldSelectablePart>().Initialize(
+                    WorldPartKind.ConnectorNode, junction.ConnectorId,
+                    junction.NodeId);
+                routeBodies[junction.ConnectorId].Add(marker.GetComponent<Renderer>());
+            }
         }
 
         private static void DrawCylinder(Transform root, Guid connectorId,
@@ -218,6 +275,13 @@ namespace SiliconSandbox.Presentation
             new Vector3(cell.X + point.X * 0.25f,
                 cell.Y + point.Y * 0.25f,
                 cell.Z + point.Z * 0.25f);
+
+        private static Vector3 RoutePosition(RouteNode node) =>
+            RoutePosition(node.Cell, node.PointQ, node.Channel);
+
+        private static Vector3 RoutePosition(GridCell cell, QuarterPoint point,
+            int channel) => Position(cell, point) +
+            Vector3.up * ((channel - 1.5f) * 0.06f);
 
         private static GameObject Primitive(string name, PrimitiveType type,
             Transform parent)

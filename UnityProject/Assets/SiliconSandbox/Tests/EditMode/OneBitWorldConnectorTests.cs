@@ -3,6 +3,7 @@ using NUnit.Framework;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Contracts;
+using SiliconSandbox.Graph;
 
 namespace SiliconSandbox.Tests.EditMode
 {
@@ -93,9 +94,40 @@ namespace SiliconSandbox.Tests.EditMode
             var westRef = JoinMember.ConnectorNode(horizontal.Id, west.Id);
             var northRef = JoinMember.ConnectorNode(vertical.Id, north.Id);
             Assert.That(session.Built.Graph.Connected(westRef, northRef), Is.False);
+            Assert.That(OneBitVisualTopology.Junctions(session.Design.Topology).Count,
+                Is.EqualTo(0), "An unjoined crossing has no junction marker.");
             session.AddJoin(Join(JoinMember.ConnectorNode(horizontal.Id, hCenter.Id),
                 JoinMember.ConnectorNode(vertical.Id, vCenter.Id)));
             Assert.That(session.Built.Graph.Connected(westRef, northRef), Is.True);
+            var junctions = OneBitVisualTopology.Junctions(session.Design.Topology);
+            Assert.That(junctions.Count, Is.EqualTo(1));
+            Assert.That(junctions[0].DirectionCount, Is.EqualTo(4));
+            Assert.That(junctions[0].PointQ, Is.EqualTo(new QuarterPoint(2, 2, 2)));
+        }
+
+        [Test]
+        public void TargetedThreeWayBranchGetsOneThreeDirectionMarker()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(
+                new WorldBounds(20, 20, 10)));
+            var west = Node(new QuarterPoint(0, 1, 1), 0);
+            var horizontalCenter = Node(new QuarterPoint(2, 2, 2), 0);
+            var east = Node(new QuarterPoint(4, 1, 1), 0);
+            var south = Node(new QuarterPoint(1, 1, 0), 1);
+            var branchCenter = Node(new QuarterPoint(2, 2, 2), 1);
+            var horizontal = Route(0, west, horizontalCenter, east);
+            var branch = Route(1, south, branchCenter);
+            session.PlaceConnector(horizontal, Array.Empty<ElectricalJoin>());
+            session.PlaceConnector(branch, Array.Empty<ElectricalJoin>());
+            Assert.That(OneBitVisualTopology.Junctions(session.Design.Topology).Count,
+                Is.EqualTo(0));
+
+            session.AddJoin(Join(
+                JoinMember.ConnectorNode(horizontal.Id, horizontalCenter.Id),
+                JoinMember.ConnectorNode(branch.Id, branchCenter.Id)));
+            var markers = OneBitVisualTopology.Junctions(session.Design.Topology);
+            Assert.That(markers.Count, Is.EqualTo(1));
+            Assert.That(markers[0].DirectionCount, Is.EqualTo(3));
         }
 
         private static OneBitWorldDesign SourceAndGate()
