@@ -4,6 +4,8 @@ The 1,000-gate fixture now uses deterministic UUIDv4 identities. `FirstPlayableB
 
 This is preliminary instrumentation, **not** performance acceptance. It currently constructs the deterministic benchmark in memory; the required saved V1 reference archive and its hash are not yet frozen. It does not yet collect scripted edit latency, save/load latency, GPU time, or all renderer-boundary comparisons. No graphical benchmark was executed for this revision because the Codex-launched Unity batch process still cannot connect to the Licensing Client, so the current native build is older than this code. The Mac player must be rebuilt and run graphically before these numbers can be reported. Windows verification remains unrun under the user's current waiver.
 
+The deterministic IDs in this temporary test fixture are only measurement scaffolding. The final authored reference world must use randomly generated UUIDv4 identities as required by [the module identity rule](../docs/modules-and-packaging.md#persistent-identity-model), then freeze the saved file and its hash for all comparison runs.
+
 Repository-only offline verification after this change:
 
 - `SILICON_SANDBOX_TEST_ROOT="$PWD/UnityProject/Temp/OfflineVerification/StoreTests" DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet` — 150 passed, zero failed.
