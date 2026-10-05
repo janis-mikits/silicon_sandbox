@@ -124,6 +124,53 @@ namespace SiliconSandbox.Tests.EditMode
             Assert.That(circuit.Storage(bId).Q, Is.EqualTo(LogicBit.One));
         }
 
+        [Test]
+        public void SameSlotSourceChangeSettlesBeforeWorldClockEdgeSamplesStorage()
+        {
+            foreach (var clockQueuedFirst in new[] { false, true })
+            {
+                var set = Guid.NewGuid(); var reset = Guid.NewGuid();
+                var sr = Guid.NewGuid();
+                var plan = new OneBitCircuitPlan(5,
+                    new[] { new SourceBinding(set, 0), new SourceBinding(reset, 1) },
+                    Array.Empty<AndBinding>(),
+                    new[] { Sr(sr, 0, 1, 2, 3, 4, LogicBit.Zero) },
+                    new WorldClockBinding(Guid.NewGuid(), Guid.NewGuid(), 2));
+                var circuit = new GraphDrivenOneBitCircuit(plan);
+                if (clockQueuedFirst) circuit.SetWorldClockLevel(LogicBit.One);
+                circuit.SetSourceOn(set, true);
+                if (!clockQueuedFirst) circuit.SetWorldClockLevel(LogicBit.One);
+                circuit.AdvanceToSettled();
+                Assert.That(circuit.Storage(sr).Q, Is.EqualTo(LogicBit.One),
+                    "Source must settle before edge sampling regardless of call order.");
+            }
+        }
+
+        [Test]
+        public void NewlyPlacedSrOnAlreadyHighClockDoesNotSampleSyntheticEdge()
+        {
+            var set = Guid.NewGuid(); var reset = Guid.NewGuid(); var sr = Guid.NewGuid();
+            var clock = new WorldClockBinding(Guid.NewGuid(), Guid.NewGuid(), 2);
+            var sources = new[] { new SourceBinding(set, 0), new SourceBinding(reset, 1) };
+            var empty = new OneBitCircuitPlan(5, sources, Array.Empty<AndBinding>(),
+                null, clock);
+            var circuit = new GraphDrivenOneBitCircuit(empty);
+            circuit.SetSourceOn(reset, true);
+            circuit.SetWorldClockLevel(LogicBit.One);
+            circuit.AdvanceToSettled();
+            var withStorage = new OneBitCircuitPlan(5, sources, Array.Empty<AndBinding>(),
+                new[] { Sr(sr, 0, 1, 2, 3, 4, LogicBit.One) }, clock);
+            circuit.ReplacePlan(withStorage);
+            Assert.That(circuit.Storage(sr).Q, Is.EqualTo(LogicBit.One),
+                "A placed component observes high CLK as its baseline, not a 0-to-1 event.");
+            circuit.SetWorldClockLevel(LogicBit.Zero);
+            circuit.AdvanceToSettled();
+            circuit.SetWorldClockLevel(LogicBit.One);
+            circuit.AdvanceToSettled();
+            Assert.That(circuit.Storage(sr).Q, Is.EqualTo(LogicBit.Zero),
+                "The subsequent real rising edge samples reset.");
+        }
+
         private static SrBinding Sr(Guid objectId, int s, int r, int clock,
             int q, int qBar, LogicBit? initialQ = null) =>
             new SrBinding(objectId, s, r, clock, q, qBar,

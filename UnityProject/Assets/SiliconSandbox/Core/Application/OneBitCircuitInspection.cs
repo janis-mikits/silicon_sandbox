@@ -62,6 +62,14 @@ namespace SiliconSandbox.Application
                     AddDriver(component, "Q_bar", circuit.Storage(component.Id).QBar);
                 }
             }
+            if (built.Plan.WorldClock.HasValue &&
+                built.Plan.WorldClock.Value.OutputNet == netIndex)
+            {
+                var clock = built.Plan.WorldClock.Value;
+                drivers.Add(new InspectedDriver(
+                    JoinMember.ConnectorNode(clock.ConnectorId, clock.AnchorNodeId),
+                    circuit.WorldClockLevel));
+            }
             return new OneBitInspection(resolved, net.Tag, pins, net.ConnectorIds,
                 drivers, Explain(netIndex, resolved));
 

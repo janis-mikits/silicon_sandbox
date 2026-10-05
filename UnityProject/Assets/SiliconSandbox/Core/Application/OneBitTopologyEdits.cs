@@ -51,7 +51,8 @@ namespace SiliconSandbox.Application
             foreach (var route in original.Connectors)
                 routes.Add(affected.Contains(route.Id) && route.Tag != retainedTag
                     ? new ConnectorRoute(route.Id, route.Kind, route.Width, route.Nodes,
-                        route.Spans, retainedTag, route.IdentityColor)
+                        route.Spans, retainedTag, route.IdentityColor,
+                        route.LinkName, route.LinkScope, route.SourceKind)
                     : route);
             var joins = new List<ElectricalJoin>(original.Joins) { join };
             return Validated(original.Pins, routes, joins, Guid.Empty, new List<Guid>());
@@ -145,8 +146,13 @@ namespace SiliconSandbox.Application
                         }
                     foreach (var candidate in remaining)
                         if (piece.Contains(candidate.FromNodeId)) spans.Add(candidate);
-                    routes.Add(new ConnectorRoute(id, route.Kind, route.Width, nodes,
-                        spans, route.Tag, route.IdentityColor));
+                    var keepsLink = route.Kind == "netLink" &&
+                        piece.Contains(route.Nodes[0].Id);
+                    routes.Add(new ConnectorRoute(id, keepsLink ? "netLink" : "wire",
+                        route.Width, nodes, spans, route.Tag, route.IdentityColor,
+                        keepsLink ? route.LinkName : null,
+                        keepsLink ? route.LinkScope : null,
+                        keepsLink ? route.SourceKind : null));
                 }
             }
             var joins = new List<ElectricalJoin>();

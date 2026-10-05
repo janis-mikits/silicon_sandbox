@@ -8,7 +8,7 @@ namespace SiliconSandbox.Simulation
     // slots; rendering and Unity frame rate never drive electrical propagation.
     public sealed class GraphDrivenOneBitCircuit
     {
-        private enum WorkKind { Source, And, StorageOutput }
+        private enum WorkKind { Source, And, StorageOutput, WorldClock }
 
         private OneBitCircuitPlan plan;
         private OneBitNet[] nets;
@@ -17,17 +17,21 @@ namespace SiliconSandbox.Simulation
         private List<int>[] gatesByInput;
         private Queue<(WorkKind kind, int index)> pending;
         private bool initializing;
+        private HashSet<Guid> newStorageIds;
+        private LogicBit worldClockLevel;
 
         public GraphDrivenOneBitCircuit(OneBitCircuitPlan initialPlan)
-            : this(initialPlan, null, null, false) { }
+            : this(initialPlan, null, null, LogicBit.Zero, false) { }
 
         private GraphDrivenOneBitCircuit(OneBitCircuitPlan next,
             Dictionary<Guid, ConstantLogicSource> oldSources,
-            Dictionary<Guid, OneBitSrFlipFlop> oldStorage, bool reset)
+            Dictionary<Guid, OneBitSrFlipFlop> oldStorage,
+            LogicBit previousWorldClockLevel, bool reset)
         {
             if (next == null) throw new ArgumentNullException(nameof(next));
             plan = next;
             initializing = oldStorage == null || reset;
+            worldClockLevel = reset ? LogicBit.Zero : previousWorldClockLevel;
             sources = new Dictionary<Guid, ConstantLogicSource>();
             foreach (var binding in next.Sources)
                 sources.Add(binding.ObjectId, oldSources != null &&
@@ -36,12 +40,17 @@ namespace SiliconSandbox.Simulation
                         existing.InitialOn) : existing
                     : new ConstantLogicSource());
             storage = new Dictionary<Guid, OneBitSrFlipFlop>();
+            newStorageIds = new HashSet<Guid>();
             foreach (var binding in next.SrFlipFlops)
+            {
+                if (oldStorage == null || reset || !oldStorage.ContainsKey(binding.ObjectId))
+                    newStorageIds.Add(binding.ObjectId);
                 storage.Add(binding.ObjectId, oldStorage != null &&
                     oldStorage.TryGetValue(binding.ObjectId, out var prior)
                     ? reset ? new OneBitSrFlipFlop(binding.InitialQ) :
                         prior.CopyWithInitialQ(binding.InitialQ)
                     : new OneBitSrFlipFlop(binding.InitialQ));
+            }
             nets = new OneBitNet[next.NetCount];
             for (var i = 0; i < nets.Length; i++) nets[i] = new OneBitNet(Guid.NewGuid());
             gatesByInput = new List<int>[next.NetCount];
@@ -57,12 +66,22 @@ namespace SiliconSandbox.Simulation
             for (var i = 0; i < plan.AndGates.Count; i++) pending.Enqueue((WorkKind.And, i));
             for (var i = 0; i < plan.SrFlipFlops.Count; i++)
                 pending.Enqueue((WorkKind.StorageOutput, i));
+            if (plan.WorldClock.HasValue) pending.Enqueue((WorkKind.WorldClock, 0));
             AdvanceToSettled();
         }
 
         public ResolvedBit Net(int index) => nets[index].Resolution;
         public ConstantLogicSource Source(Guid objectId) => sources[objectId];
         public OneBitSrFlipFlop Storage(Guid objectId) => storage[objectId];
+        public LogicBit WorldClockLevel => worldClockLevel;
+
+        public void SetWorldClockLevel(LogicBit level)
+        {
+            if (level != LogicBit.Zero && level != LogicBit.One)
+                throw new ArgumentOutOfRangeException(nameof(level));
+            worldClockLevel = level;
+            if (plan.WorldClock.HasValue) pending.Enqueue((WorkKind.WorldClock, 0));
+        }
 
         public void SetSourceOn(Guid objectId, bool on)
         {
@@ -86,7 +105,8 @@ namespace SiliconSandbox.Simulation
         {
             if (pending.Count != 0)
                 throw new InvalidOperationException("Reset requires a settled boundary.");
-            Publish(new GraphDrivenOneBitCircuit(plan, sources, storage, true));
+            Publish(new GraphDrivenOneBitCircuit(plan, sources, storage,
+                worldClockLevel, true));
         }
 
         // Caller constructs and validates the whole candidate before publishing it.
@@ -95,7 +115,8 @@ namespace SiliconSandbox.Simulation
         {
             if (pending.Count != 0)
                 throw new InvalidOperationException("Graph replacement requires a settled boundary.");
-            Publish(new GraphDrivenOneBitCircuit(next, sources, storage, false));
+            Publish(new GraphDrivenOneBitCircuit(next, sources, storage,
+                worldClockLevel, false));
         }
 
         private void Publish(GraphDrivenOneBitCircuit candidate)
@@ -107,6 +128,8 @@ namespace SiliconSandbox.Simulation
             gatesByInput = candidate.gatesByInput;
             pending = candidate.pending;
             initializing = candidate.initializing;
+            newStorageIds = candidate.newStorageIds;
+            worldClockLevel = candidate.worldClockLevel;
         }
 
         public void AdvanceToSettled(int maximumDeltaPasses = 1024)
@@ -139,6 +162,10 @@ namespace SiliconSandbox.Simulation
                         case WorkKind.StorageOutput:
                             DriveStorageOutput(work.index);
                             break;
+                        case WorkKind.WorldClock:
+                            var clock = plan.WorldClock.Value;
+                            Drive(clock.OutputNet, clock.ConnectorId, worldClockLevel);
+                            break;
                     }
                 }
                 if (initializing)
@@ -150,7 +177,16 @@ namespace SiliconSandbox.Simulation
                             nets[binding.Clock].Resolution.Value);
                     }
                     initializing = false;
+                    newStorageIds.Clear();
                     return;
+                }
+                if (newStorageIds.Count > 0)
+                {
+                    foreach (var binding in plan.SrFlipFlops)
+                        if (newStorageIds.Contains(binding.ObjectId))
+                            storage[binding.ObjectId].InitializeClockBaseline(
+                                nets[binding.Clock].Resolution.Value);
+                    newStorageIds.Clear();
                 }
                 var clockValues = new LogicBit[plan.SrFlipFlops.Count];
                 var nextQ = new LogicBit[plan.SrFlipFlops.Count];

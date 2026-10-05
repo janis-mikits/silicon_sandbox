@@ -68,8 +68,14 @@ namespace SiliconSandbox.Graph
             }
             if (consumedPins.Count != authoredPins.Count)
                 throw new ArgumentException("Topology contains an unowned component pin.");
+            WorldClockBinding? clockBinding = null;
+            foreach (var route in topology.Connectors)
+                if (route.Kind == "netLink" &&
+                    (!clockBinding.HasValue || route.Id.CompareTo(clockBinding.Value.ConnectorId) < 0))
+                    clockBinding = new WorldClockBinding(route.Id, route.Nodes[0].Id,
+                        indexes[JoinMember.ConnectorNode(route.Id, route.Nodes[0].Id)]);
             return new BuiltOneBitCircuitPlan(graph,
-                new OneBitCircuitPlan(graph.Nets.Count, sources, gates, storage), indexes);
+                new OneBitCircuitPlan(graph.Nets.Count, sources, gates, storage, clockBinding), indexes);
         }
     }
 }

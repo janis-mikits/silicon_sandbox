@@ -32,4 +32,12 @@ This log records only new game or material cross-system choices that would norma
 
 **Options:** (1) Treat initial net resolution as an edge; (2) settle initial nets and establish each component's previous CLK value without sampling.
 
-**Recommendation adopted:** Option 2 preserves authored initialization and leaves the accepted 0→Z positive-edge rule intact for later live transitions. It applies to new world, reopen, and Reset Simulation. Recorded in [circuit time](../docs/circuit-time-and-clock.md#clock-and-event-model).
+**Recommendation adopted:** Option 2 preserves authored initialization and leaves the accepted 0→Z positive-edge rule intact for later live transitions. It applies to new world, reopen, Reset Simulation, and a newly placed edge-triggered component at a settled edit boundary. Existing components keep their prior CLK observations. Recorded in [circuit time](../docs/circuit-time-and-clock.md#clock-and-event-model).
+
+## 5 October 2026 — Which split clock-stub piece keeps the Net Link
+
+**Issue:** The accepted version 1 `netLink` record has route nodes but no separate anchor field. If a break splits a world-clock stub and both pieces keep the link name, the break fails electrically because matching stubs immediately rejoin.
+
+**Options:** (1) Add a required anchor field to the accepted schema; (2) delete all surviving geometry on a split; (3) treat `nodes[0]` as the saved physical link anchor and convert detached pieces to ordinary wires.
+
+**Recommendation adopted:** Option 3 preserves the accepted schema and the surviving geometry while making the break electrically real. Only the piece containing the first node retains the clock-link identity; detached pieces receive normal split IDs and no link fields. Recorded in the [version 1 schema](../docs/first-playable-data-schema.md#connector-geometry-and-joins).

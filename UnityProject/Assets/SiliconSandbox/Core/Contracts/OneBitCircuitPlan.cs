@@ -45,15 +45,27 @@ namespace SiliconSandbox.Contracts
         }
     }
 
+    public readonly struct WorldClockBinding
+    {
+        public Guid ConnectorId { get; }
+        public Guid AnchorNodeId { get; }
+        public int OutputNet { get; }
+
+        public WorldClockBinding(Guid connectorId, Guid anchorNodeId, int outputNet)
+        { ConnectorId = connectorId; AnchorNodeId = anchorNodeId; OutputNet = outputNet; }
+    }
+
     public sealed class OneBitCircuitPlan
     {
         public int NetCount { get; }
         public IReadOnlyList<SourceBinding> Sources { get; }
         public IReadOnlyList<AndBinding> AndGates { get; }
         public IReadOnlyList<SrBinding> SrFlipFlops { get; }
+        public WorldClockBinding? WorldClock { get; }
 
         public OneBitCircuitPlan(int netCount, IEnumerable<SourceBinding> sources,
-            IEnumerable<AndBinding> andGates, IEnumerable<SrBinding> srFlipFlops = null)
+            IEnumerable<AndBinding> andGates, IEnumerable<SrBinding> srFlipFlops = null,
+            WorldClockBinding? worldClock = null)
         {
             if (netCount < 0 || sources == null || andGates == null)
                 throw new ArgumentException("Invalid circuit plan.");
@@ -90,10 +102,19 @@ namespace SiliconSandbox.Contracts
                 CheckNet(storage.S); CheckNet(storage.R); CheckNet(storage.Clock);
                 CheckNet(storage.Q); CheckNet(storage.QBar);
             }
+            if (worldClock.HasValue)
+            {
+                var clock = worldClock.Value;
+                if (clock.ConnectorId == Guid.Empty || clock.AnchorNodeId == Guid.Empty ||
+                    !outputDriverIds.Add(clock.ConnectorId))
+                    throw new ArgumentException("Invalid world-clock driver identity.");
+                CheckNet(clock.OutputNet);
+            }
             NetCount = netCount;
             Sources = sourceList.AsReadOnly();
             AndGates = gateList.AsReadOnly();
             SrFlipFlops = srList.AsReadOnly();
+            WorldClock = worldClock;
 
             void CheckNet(int index)
             {

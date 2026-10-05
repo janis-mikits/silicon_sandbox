@@ -96,9 +96,13 @@ namespace SiliconSandbox.Authoring
         public IReadOnlyList<RouteSpan> Spans { get; }
         public string Tag { get; }
         public string IdentityColor { get; }
+        public string LinkName { get; }
+        public string LinkScope { get; }
+        public string SourceKind { get; }
 
         public ConnectorRoute(Guid id, string kind, int width, IEnumerable<RouteNode> nodes,
-            IEnumerable<RouteSpan> spans, string tag = "", string identityColor = null)
+            IEnumerable<RouteSpan> spans, string tag = "", string identityColor = null,
+            string linkName = null, string linkScope = null, string sourceKind = null)
         {
             Id = id;
             Kind = kind;
@@ -107,6 +111,9 @@ namespace SiliconSandbox.Authoring
             Spans = Array.AsReadOnly(new List<RouteSpan>(spans).ToArray());
             Tag = tag;
             IdentityColor = identityColor;
+            LinkName = linkName;
+            LinkScope = linkScope;
+            SourceKind = sourceKind;
         }
     }
 

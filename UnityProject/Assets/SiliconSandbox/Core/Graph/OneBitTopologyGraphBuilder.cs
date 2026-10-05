@@ -51,6 +51,7 @@ namespace SiliconSandbox.Graph
             var points = new Dictionary<JoinMember, (GridCell cell, QuarterPoint point)>();
             var routes = new Dictionary<Guid, ConnectorRoute>();
             var objectIds = new HashSet<Guid>();
+            var clockAnchorMembers = new List<JoinMember>();
 
             foreach (var pin in design.Pins)
             {
@@ -66,8 +67,22 @@ namespace SiliconSandbox.Graph
                 if (route == null) throw Invalid("Null connector.");
                 AddId(allIds, route.Id);
                 routes.Add(route.Id, route);
-                if (route.Kind != "wire" || route.Width != 1 || route.Nodes.Count == 0)
+                if (route.Width != 1 || route.Nodes.Count == 0)
                     throw Invalid("Unsupported or empty one-bit connector.");
+                if (route.Kind == "wire")
+                {
+                    if (route.LinkName != null || route.LinkScope != null ||
+                        route.SourceKind != null)
+                        throw Invalid("An ordinary wire cannot claim Net Link identity.");
+                }
+                else if (route.Kind == "netLink")
+                {
+                    if (route.LinkName != "@world-clock" || route.LinkScope != "world" ||
+                        route.SourceKind != "worldClock")
+                        throw Invalid("Only the reserved world-clock Net Link is supported in version 1.");
+                    clockAnchorMembers.Add(JoinMember.ConnectorNode(route.Id, route.Nodes[0].Id));
+                }
+                else throw Invalid("Unsupported one-bit connector kind.");
                 if (route.Tag == null || (route.IdentityColor != null && !ValidColor(route.IdentityColor)))
                     throw Invalid("Invalid connector presentation fields.");
                 foreach (var node in route.Nodes)
@@ -106,6 +121,9 @@ namespace SiliconSandbox.Graph
                             memberIndexes[JoinMember.ConnectorNode(route.Id, node.Id)]))
                         throw Invalid("Connector node/span graph is disconnected.");
             }
+            for (var i = 1; i < clockAnchorMembers.Count; i++)
+                Union(parents, memberIndexes[clockAnchorMembers[0]],
+                    memberIndexes[clockAnchorMembers[i]]);
 
             var attachedPins = new Dictionary<JoinMember, Guid>();
             foreach (var join in design.Joins)
