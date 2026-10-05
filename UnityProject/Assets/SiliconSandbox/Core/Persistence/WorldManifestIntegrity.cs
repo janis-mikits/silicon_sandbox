@@ -172,7 +172,7 @@ namespace SiliconSandbox.Persistence
             entry.UncompressedBytes == bytes.LongLength &&
             entry.Sha256 == Sha256Hex(bytes);
 
-        private static void ValidateStructure(WorldManifestRecord manifest)
+        internal static void ValidateStructure(WorldManifestRecord manifest)
         {
             if (manifest.WorldId == Guid.Empty)
                 throw new InvalidDataException("Empty world identity.");
