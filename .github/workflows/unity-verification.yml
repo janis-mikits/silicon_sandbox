@@ -1,10 +1,9 @@
 name: Unity verification
 
 # Runner labels, activated Editor licenses, and UNITY_EDITOR_* variables must be
-# configured before this workflow can run. No CI result is claimed by this file.
+# configured before this workflow can run. The public repository has no dedicated
+# runners yet, so dispatch is manual and no CI result is claimed by this file.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

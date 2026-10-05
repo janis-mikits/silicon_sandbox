@@ -170,6 +170,8 @@ Repeat for PlayMode. Wait for completion and inspect XML; do not prematurely ter
 
 Unity needs an activated license. Personal activation uses Hub; the documented Pro command-line workflow must not be assumed to apply to Personal. Runner setup, credentials, dependencies, build modules and remote repository access require authorization. No credentials belong in source or reports. No installation, account inspection or GitHub settings change is authorized by this design.
 
+Current implementation status, 5 October 2026: the personal repository is public and has no configured dedicated Unity runners. At the user's direction, do not attach this personal Mac as a self-hosted runner. The committed workflow is manual-dispatch only until licensed runners are available; it is not active CI evidence. Local macOS verification passed for slices 0 and 1, while current slice 2 verification is pending after Codex-launched batch mode lost its Unity Licensing Client channel. A direct Unity Hub project open succeeded. Windows native and performance checks remain unrun because no Windows PC is available at this time.
+
 Official references reviewed during planning:
 
 - [Unity 6.3 Editor CLI](https://docs.unity3d.com/6000.3/Documentation/Manual/EditorCommandLineArguments.html)

@@ -18,6 +18,7 @@ Thumbs.db
 [Mm]emoryCaptures/
 [Rr]ecordings/
 UnityProject/.upm-cache/
+.verification-tools/
 
 # Unity and IDE-generated solution files
 *.csproj
