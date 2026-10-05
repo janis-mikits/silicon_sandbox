@@ -16,6 +16,13 @@ namespace SiliconSandbox.Application
             if (!snapshot.SizeCells.Equals(new GridCell(1, 1, 1)))
                 throw new NotSupportedException(
                     "Automatic port layout currently requires one cell.");
+            return ForSelection(snapshot);
+        }
+
+        public static IReadOnlyList<OneBitPortChoice> ForSelection(
+            OneBitModuleSnapshot snapshot)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var graph = OneBitTopologyGraphBuilder.Build(snapshot.Topology);
             var selected = new List<OneBitPortCandidate>();
             var representedNets = new HashSet<DerivedOneBitNet>();
@@ -58,16 +65,24 @@ namespace SiliconSandbox.Application
                 for (var suffix = 2; !usedNames.Add(name); suffix++)
                     name = baseName + "_" + suffix;
                 var slot = direction == OneBitPortDirection.Output ? east++ : west++;
-                if (slot >= 4)
+                var capacity = checked(4 * snapshot.SizeCells.Y *
+                    snapshot.SizeCells.Z);
+                if (slot >= capacity)
                     throw new NotSupportedException(
                         "This selection needs a larger configured module face.");
+                var faceCell = slot / 4;
+                var localCell = new GridCell(
+                    direction == OneBitPortDirection.Output
+                        ? snapshot.SizeCells.X - 1 : 0,
+                    faceCell / snapshot.SizeCells.Z,
+                    faceCell % snapshot.SizeCells.Z);
                 var point = direction == OneBitPortDirection.Output
                     ? new QuarterPoint(4, slot % 2 == 0 ? 1 : 3,
-                        slot < 2 ? 1 : 3)
+                        slot % 4 < 2 ? 1 : 3)
                     : new QuarterPoint(0, slot % 2 == 0 ? 1 : 3,
-                        slot < 2 ? 1 : 3);
+                        slot % 4 < 2 ? 1 : 3);
                 output.Add(new OneBitPortChoice(name, direction,
-                    new GridCell(0, 0, 0), point,
+                    localCell, point,
                     candidate.InternalEndpoint));
             }
             return output.AsReadOnly();
