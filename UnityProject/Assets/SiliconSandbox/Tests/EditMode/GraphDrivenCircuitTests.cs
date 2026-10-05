@@ -12,6 +12,31 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class GraphDrivenCircuitTests
     {
         [Test]
+        public void LongAcyclicChainIsNotMistakenForFeedbackOscillation()
+        {
+            const int gateCount = 1500;
+            var sourceId = Guid.NewGuid();
+            var source = new SourceBinding(sourceId, 0, LogicBit.One, true);
+            var heldOne = new SourceBinding(Guid.NewGuid(), 1,
+                LogicBit.One, true);
+            var gates = new List<AndBinding>();
+            for (var i = 0; i < gateCount; i++)
+                gates.Add(new AndBinding(Guid.NewGuid(),
+                    i == 0 ? 0 : i + 1, 1, i + 2));
+            var plan = new OneBitCircuitPlan(gateCount + 2,
+                new[] { source, heldOne }, gates);
+            var circuit = new GraphDrivenOneBitCircuit(plan);
+            Assert.That(circuit.Net(gateCount + 1).Value,
+                Is.EqualTo(LogicBit.One));
+
+            circuit.SetSourceOn(sourceId, false);
+            circuit.AdvanceToSettled();
+            Assert.That(circuit.Net(gateCount + 1).Value,
+                Is.EqualTo(LogicBit.Zero),
+                "A 1,500-gate path must settle without a false 1,024-pass fault.");
+        }
+
+        [Test]
         public void EmptyWorldHasNoInventedNetsOrComponents()
         {
             var topology = new OneBitAuthoredTopology(Array.Empty<AuthoredPin>(),
