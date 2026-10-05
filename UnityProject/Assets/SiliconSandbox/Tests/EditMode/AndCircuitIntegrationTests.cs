@@ -97,6 +97,23 @@ namespace SiliconSandbox.Tests.EditMode
             });
         }
 
+        [Test]
+        public void FixtureRoutesUseVersionOneNodesSpansAndExplicitPinJoins()
+        {
+            var design = AndFixtureDesign.Create();
+            var topology = design.Topology;
+            var graph = OneBitTopologyGraphBuilder.Build(topology);
+            Assert.That(topology.Connectors.Count, Is.EqualTo(3));
+            Assert.That(topology.Joins.Count, Is.EqualTo(5));
+            Assert.That(graph.Nets.Count, Is.EqualTo(3));
+            Assert.That(graph.Connected(Pin(design.SourceA.Pin("OUT")), Pin(design.Gate.Pin("A"))), Is.True);
+            Assert.That(graph.Connected(Pin(design.SourceB.Pin("OUT")), Pin(design.Gate.Pin("B"))), Is.True);
+            Assert.That(graph.Connected(Pin(design.Gate.Pin("A")), Pin(design.Gate.Pin("B"))), Is.False);
+            Assert.That(graph.Connected(Pin(design.Gate.Pin("A")), Pin(design.Gate.Pin("Y"))), Is.False);
+        }
+
+        private static JoinMember Pin(FixturePinRef pin) => JoinMember.ComponentPin(pin.ObjectId, pin.PinId);
+
         private static void AssertPins(string type, IReadOnlyList<string> expected)
         {
             var pins = BuiltInPinCatalog.Pins(type, 1);

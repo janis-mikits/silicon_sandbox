@@ -63,10 +63,13 @@ namespace SiliconSandbox.Authoring
 
     public sealed class AndFixtureDesign
     {
+        private OneBitAuthoredTopology topology;
         public FixtureComponent SourceA { get; }
         public FixtureComponent SourceB { get; }
         public FixtureComponent Gate { get; }
         public IReadOnlyList<FixtureConnector> Connectors { get; }
+        public OneBitAuthoredTopology Topology => topology ??
+            (topology = AndFixtureTopology.Create(this));
 
         public AndFixtureDesign(FixtureComponent sourceA, FixtureComponent sourceB,
             FixtureComponent gate, params FixtureConnector[] connectors)

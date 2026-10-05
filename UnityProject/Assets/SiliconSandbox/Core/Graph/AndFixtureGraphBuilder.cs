@@ -34,8 +34,19 @@ namespace SiliconSandbox.Graph
             }
             if (aNet == Guid.Empty || bNet == Guid.Empty || yNet == Guid.Empty)
                 throw new ArgumentException("Incomplete AND fixture connectivity.");
+            var topology = design.Topology;
+            var graph = OneBitTopologyGraphBuilder.Build(topology);
+            var a = graph.NetFor(Pin(design.SourceA.Pin("OUT")));
+            var b = graph.NetFor(Pin(design.SourceB.Pin("OUT")));
+            var y = graph.NetFor(Pin(design.Gate.Pin("Y")));
+            if (!ReferenceEquals(a, graph.NetFor(Pin(design.Gate.Pin("A")))) ||
+                !ReferenceEquals(b, graph.NetFor(Pin(design.Gate.Pin("B")))) ||
+                ReferenceEquals(a, b) || ReferenceEquals(a, y) || ReferenceEquals(b, y))
+                throw new ArgumentException("Authored AND topology does not make three expected nets.");
             return new AndCircuitWiring(design.SourceA.Id, design.SourceB.Id, design.Gate.Id, aNet, bNet, yNet);
         }
+
+        private static JoinMember Pin(FixturePinRef pin) => JoinMember.ComponentPin(pin.ObjectId, pin.PinId);
 
         private static bool Matches(FixtureConnector connector, FixturePinRef first, FixturePinRef second)
         {
