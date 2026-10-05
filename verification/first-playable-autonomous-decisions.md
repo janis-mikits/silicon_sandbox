@@ -17,3 +17,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Keep automatic push runs pending and failing; (2) make the Unity workflow manual until suitable licensed runners are available, then restore automatic triggering after a real run.
 
 **Recommendation adopted:** Option 2 keeps the workflow reviewable without implying active CI or attaching a personal machine to the public repository. The [workflow](../.github/workflows/unity-verification.yml) now uses manual dispatch only. Windows native/performance verification remains unrun until an appropriate machine exists.
+
+## 5 October 2026 — Clock edge rounding at an exact half picosecond
+
+**Issue:** The accepted clock rule says to round each rational edge time to the nearest picosecond, but an edge exactly halfway between two timestamps has two equally near results. At certain valid frequencies, that choice changes when an edge is processed by one picosecond.
+
+**Options:** (1) Always round ties upward; (2) round ties to the even picosecond.
+
+**Recommendation adopted:** Option 2 avoids a systematic upward bias while remaining deterministic. Every edge is still rounded from its absolute rational time, so interval rounding cannot accumulate drift. Recorded in [circuit time](../docs/circuit-time-and-clock.md#first-playable-scheduler-contract).
