@@ -6,6 +6,8 @@ This is preliminary instrumentation, **not** performance acceptance. It currentl
 
 The deterministic IDs in this temporary test fixture are only measurement scaffolding. The final authored reference world must use randomly generated UUIDv4 identities as required by [the module identity rule](../docs/modules-and-packaging.md#persistent-identity-model), then freeze the saved file and its hash for all comparison runs.
 
+A separate 60-simulated-second integration test now checks the full mixed 1,000-gate fixture at 10 Hz processes exactly 1,200 expected edges and ends low, with the first gate's known 0 output. It passed in the offline runner (**158 total tests, zero failed**). This arithmetic/event check does not measure ten cycles per **real** second or rendered FPS; the graphical benchmark still must establish both.
+
 Repository-only offline verification after this change:
 
 - `SILICON_SANDBOX_TEST_ROOT="$PWD/UnityProject/Temp/OfflineVerification/StoreTests" DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet` — 150 passed, zero failed.

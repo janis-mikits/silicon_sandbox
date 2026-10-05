@@ -4,11 +4,32 @@ using NUnit.Framework;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Contracts;
+using SiliconSandbox.Simulation;
 
 namespace SiliconSandbox.Tests.EditMode
 {
     public sealed class FirstPlayableBenchmarkFactoryTests
     {
+        [Test]
+        public void MixedFixtureProcessesEveryTenHertzEdgeForSixtySimulatedSeconds()
+        {
+            var fixture = FirstPlayableBenchmarkFactory.Create();
+            var session = new OneBitWorldSession(fixture.World, "10",
+                new Dictionary<Guid, OneBitModuleVersion>
+                { [fixture.Version.VersionId] = fixture.Version });
+            session.Scheduler.StartClock();
+            session.Scheduler.AdvanceUntil(new SimulationTime(60, 0));
+            Assert.That(session.Scheduler.ClockEdgesProcessed.ToString(),
+                Is.EqualTo("1200"),
+                "Ten complete cycles per simulated second have two edges each.");
+            Assert.That(session.Scheduler.ClockLevel, Is.EqualTo(LogicBit.Zero));
+            Assert.That(session.Scheduler.Now,
+                Is.EqualTo(new SimulationTime(60, 0)));
+            var gate = fixture.World.Components[0];
+            Assert.That(session.Inspector.InspectPin(gate.Id,
+                gate.PinIds["Y"]).Value, Is.EqualTo(LogicBit.Zero));
+        }
+
         [Test]
         public void ReferenceWorldUsesRepeatableAuthoredIdentities()
         {
