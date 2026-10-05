@@ -19,7 +19,7 @@ namespace SiliconSandbox.Application
         public string FloorMaterialId { get; }
         public string WallStyleId { get; }
         public OneBitWorldSession Session { get; }
-        public OneBitPlayerInventory Inventory { get; }
+        public OneBitPlayerInventory Inventory { get; private set; }
 
         private OneBitWorldContext(Guid worldId, string worldName,
             string floorMaterialId, string wallStyleId,
@@ -62,5 +62,33 @@ namespace SiliconSandbox.Application
             OneBitSaveBoundary.Capture(Session, WorldId, WorldName,
                 FloorMaterialId, WallStyleId, player, Inventory.Slots,
                 Inventory.SelectedHotbarSlot);
+
+        // Call only after the recoverable world/library transaction has
+        // published and verified every file. This updates the live inventory
+        // without reopening the world or resetting ordinary simulation.
+        public void ApplyDurablyPublishedPackage(OneBitStagedPackage staged,
+            PackagePublicationReceipt receipt)
+        {
+            if (staged == null || receipt == null)
+                throw new ArgumentNullException();
+            if (staged.SavedWorld.WorldId != WorldId ||
+                staged.BaseRevision != Session.Revision ||
+                receipt.WorldId != WorldId ||
+                receipt.VersionId != staged.Version.VersionId)
+                throw new InvalidOperationException(
+                    "Published package does not match this authored revision.");
+            if (Session.HasModuleVersion(staged.Version.VersionId))
+                throw new InvalidOperationException(
+                    "Published fixed version is already registered.");
+            var nextInventory = new OneBitPlayerInventory(Inventory.Slots,
+                Inventory.SelectedHotbarSlot);
+            var slot = nextInventory.AddModuleVersion(staged.Version.FamilyId,
+                staged.Version.VersionId);
+            if (slot != staged.InventorySlot)
+                throw new InvalidOperationException(
+                    "Inventory changed since the package was prepared.");
+            Session.RegisterPublishedVersion(staged.Version);
+            Inventory = nextInventory;
+        }
     }
 }

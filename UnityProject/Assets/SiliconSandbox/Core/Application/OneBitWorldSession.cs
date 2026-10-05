@@ -35,6 +35,19 @@ namespace SiliconSandbox.Application
             new System.Collections.ObjectModel.ReadOnlyDictionary<Guid,
                 OneBitModuleVersion>(versions);
 
+        internal void RegisterPublishedVersion(OneBitModuleVersion version)
+        {
+            if (version == null) throw new ArgumentNullException(nameof(version));
+            if (versions.ContainsKey(version.VersionId))
+                throw new InvalidOperationException(
+                    "A fixed module version already uses this identity.");
+            var next = new Dictionary<Guid, OneBitModuleVersion>(versions)
+            { [version.VersionId] = version };
+            versions = next;
+            // A package copies a definition; it does not alter the current
+            // world graph, clock phase, or any placed instance's live state.
+        }
+
         public OneBitWorldSession(OneBitWorldDesign design, string frequencyHz = "10",
             IReadOnlyDictionary<Guid, OneBitModuleVersion> moduleVersions = null,
             Func<DateTimeOffset> utcNow = null)

@@ -5,6 +5,25 @@ using System.Text;
 
 namespace SiliconSandbox.Persistence
 {
+    public sealed class PackagePublicationReceipt
+    {
+        public Guid WorldId { get; }
+        public Guid VersionId { get; }
+        public string WorldSha256 { get; }
+        public string IndexSha256 { get; }
+        public string DefinitionSha256 { get; }
+
+        internal PackagePublicationReceipt(Guid worldId, Guid versionId,
+            string worldSha256, string indexSha256, string definitionSha256)
+        {
+            WorldId = worldId;
+            VersionId = versionId;
+            WorldSha256 = worldSha256;
+            IndexSha256 = indexSha256;
+            DefinitionSha256 = definitionSha256;
+        }
+    }
+
     // One recoverable transaction for a new fixed library definition, its
     // library index, and the world file whose inventory references it. The
     // caller provides strict semantic validators for all three prepared files.
@@ -25,7 +44,8 @@ namespace SiliconSandbox.Persistence
             public string NewDefinitionHash;
         }
 
-        public static void Publish(string storageRoot, Guid worldId,
+        public static PackagePublicationReceipt Publish(string storageRoot,
+            Guid worldId,
             Guid versionId, byte[] worldArchive, byte[] libraryIndexJson,
             byte[] definitionJson, Action<Stream> verifyWorld,
             Action<Stream> verifyIndex, Action<Stream> verifyDefinition,
@@ -78,6 +98,9 @@ namespace SiliconSandbox.Persistence
                     throw new InvalidDataException(
                         "Published package bytes disagree with prepared bytes.");
                 Finish(root, journal);
+                return new PackagePublicationReceipt(worldId, versionId,
+                    journal.NewWorldHash, journal.NewIndexHash,
+                    journal.NewDefinitionHash);
             }
             catch
             {
