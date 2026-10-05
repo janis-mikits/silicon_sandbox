@@ -13,6 +13,7 @@ namespace SiliconSandbox.Bootstrap
         private const string SmokeOutputVariable = "SILICON_SANDBOX_SMOKE_OUTPUT";
 
         public OneBitWorldSession Session { get; private set; }
+        public OneBitPlayerInventory Inventory { get; private set; }
         public OneBitWorldView WorldView { get; private set; }
         public OneBitWorldInteraction Interaction { get; private set; }
 
@@ -20,6 +21,7 @@ namespace SiliconSandbox.Bootstrap
         {
             Session = new OneBitWorldSession(OneBitWorldDesign.Empty(
                 new WorldBounds(32, 32, 16)));
+            Inventory = OneBitPlayerInventory.NewFreeplay();
             var renderedWorld = new GameObject("Authored one-bit world");
             WorldView = renderedWorld.AddComponent<OneBitWorldView>();
             WorldView.Attach(Session);
@@ -40,7 +42,7 @@ namespace SiliconSandbox.Bootstrap
             var controller = playerObject.AddComponent<CreativeCameraController>();
             controller.SetCameraPivot(camera.transform);
             Interaction = playerObject.AddComponent<OneBitWorldInteraction>();
-            Interaction.Attach(Session, controller);
+            Interaction.Attach(Session, controller, Inventory);
 
             var output = Environment.GetEnvironmentVariable(SmokeOutputVariable);
             if (string.IsNullOrEmpty(output)) return;

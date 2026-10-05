@@ -2,6 +2,14 @@
 
 This log records only new game or material cross-system choices that would normally have required the user's decision. The user authorized choosing the recommended option during the extended first-playable implementation. Routine code choices are omitted; the canonical document linked for each entry governs behavior.
 
+## 5 October 2026 — Stable IDs for the initial connector tools
+
+**Issue:** The accepted version 1 inventory saves durable `itemTypeId` values, but the one-bit wire and world-clock-link tool IDs were not fixed. Changing a UI label must not make an old inventory item unknown.
+
+**Options:** (1) Save display names such as “Wire” and “Clock Link”; (2) assign stable built-in IDs and keep labels separate.
+
+**Recommendation adopted:** Option 2. Use `builtin.wire` and `builtin.world_clock_link`; reuse the accepted component `typeId` strings for the other first-five hotbar items. A fixed module is saved by exact family/version IDs, not a display name. Recorded in the [version 1 schema](../docs/first-playable-data-schema.md#world-archive).
+
 ## 5 October 2026 — Breaking a wire when its channel must split
 
 **Issue:** A break can leave two surviving connector pieces in one cell that previously shared one logical channel. The four-channel limit forbids leaving them as separate nets on that same channel.

@@ -5,6 +5,7 @@ using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Contracts;
 using SiliconSandbox.Presentation;
+using SiliconSandbox.Persistence;
 using UnityEngine;
 
 namespace SiliconSandbox.Interaction
@@ -14,18 +15,13 @@ namespace SiliconSandbox.Interaction
     public sealed class OneBitWorldInteraction : MonoBehaviour
     {
         private const float ReachCells = 15f;
-        private static readonly string[] Hotbar =
-        {
-            "Source", "Wire", "AND", "SR", "Clock Link", "", "", "", ""
-        };
-
         private OneBitWorldSession session;
+        private OneBitPlayerInventory inventory;
         private CreativeCameraController player;
         private Camera viewCamera;
         private WorldSelectablePart hovered;
         private RaycastHit hit;
         private bool hasHit;
-        private int selectedSlot;
         private JoinMember? wireStart;
         private GameObject ghostRoot;
         private GameObject rotationRoot;
@@ -53,12 +49,15 @@ namespace SiliconSandbox.Interaction
         private ulong observedRevision = ulong.MaxValue;
 
         public OneBitWorldSession Session => session;
+        public OneBitPlayerInventory Inventory => inventory;
         public WorldSelectablePart HoveredPart => hovered;
 
         public void Attach(OneBitWorldSession activeSession,
-            CreativeCameraController cameraController)
+            CreativeCameraController cameraController,
+            OneBitPlayerInventory playerInventory = null)
         {
             session = activeSession ?? throw new ArgumentNullException(nameof(activeSession));
+            inventory = playerInventory ?? OneBitPlayerInventory.NewFreeplay();
             player = cameraController ?? throw new ArgumentNullException(nameof(cameraController));
             viewCamera = player.CameraPivot.GetComponent<Camera>();
             if (viewCamera == null) throw new ArgumentException("Player camera is missing.");
@@ -97,11 +96,7 @@ namespace SiliconSandbox.Interaction
 
             for (var i = 0; i < 9; i++)
                 if (Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i)))
-                {
-                    selectedSlot = i;
-                    wireStart = null;
-                    ghostCached = false;
-                }
+                    SelectSlot(i);
             TargetAtCrosshair();
             if (rotationPreview != null)
             {
@@ -192,7 +187,7 @@ namespace SiliconSandbox.Interaction
                 TryEdit(() => session.ToggleSource(hovered.OwnerId));
                 return;
             }
-            if (selectedSlot == 1)
+            if (SelectedCatalogId() == OneBitCatalogItemIds.Wire)
             {
                 if (!wireStart.HasValue)
                 {
@@ -225,7 +220,7 @@ namespace SiliconSandbox.Interaction
                 }
                 return;
             }
-            if (selectedSlot == 4)
+            if (SelectedCatalogId() == OneBitCatalogItemIds.WorldClockLink)
             {
                 if (hovered == null || !IsPinKind(hovered.Kind) ||
                     !IsClockTarget(hovered))
@@ -520,12 +515,44 @@ namespace SiliconSandbox.Interaction
 
         private string SelectedComponentType()
         {
-            switch (selectedSlot)
+            var id = SelectedCatalogId();
+            return id == BuiltInPinCatalog.Source ||
+                id == BuiltInPinCatalog.And ||
+                id == BuiltInPinCatalog.SrFlipFlop ? id : null;
+        }
+
+        private string SelectedCatalogId()
+        {
+            var item = inventory.SelectedItem;
+            return item != null && item.Kind == SavedInventoryKind.CatalogItem
+                ? item.ItemTypeId : null;
+        }
+
+        private void SelectSlot(int index)
+        {
+            inventory.SelectHotbar(index);
+            wireStart = null;
+            ghostCached = false;
+        }
+
+        private string SlotLabel(int index)
+        {
+            var item = inventory.Slots[index];
+            if (item == null) return "";
+            if (item.Kind == SavedInventoryKind.ModuleVersion)
             {
-                case 0: return BuiltInPinCatalog.Source;
-                case 2: return BuiltInPinCatalog.And;
-                case 3: return BuiltInPinCatalog.SrFlipFlop;
-                default: return null;
+                if (session.ModuleVersions.TryGetValue(item.VersionId,
+                    out var version)) return version.Name;
+                return "MISSING module";
+            }
+            switch (item.ItemTypeId)
+            {
+                case BuiltInPinCatalog.Source: return "Source";
+                case OneBitCatalogItemIds.Wire: return "Wire";
+                case BuiltInPinCatalog.And: return "AND";
+                case BuiltInPinCatalog.SrFlipFlop: return "SR";
+                case OneBitCatalogItemIds.WorldClockLink: return "Clock Link";
+                default: return "Unknown item";
             }
         }
 
@@ -598,17 +625,16 @@ namespace SiliconSandbox.Interaction
                 var left = (Screen.width - width) * 0.5f;
                 for (var i = 0; i < 9; i++)
                 {
-                    var title = (i + 1) + " " + Hotbar[i];
+                    var title = (i + 1) + " " + SlotLabel(i);
                     if (GUI.Button(new Rect(left + i * 72f,
                         Screen.height - 54f, 70f, 46f), title))
                     {
-                        selectedSlot = i;
-                        wireStart = null;
-                        ghostCached = false;
+                        SelectSlot(i);
                     }
                 }
                 GUI.Label(new Rect(Screen.width - 175f, Screen.height - 90f,
-                    165f, 28f), "Held: " + Hotbar[selectedSlot]);
+                    165f, 28f), "Held: " +
+                    SlotLabel(inventory.SelectedHotbarSlot));
                 GUI.Label(new Rect(12f, 12f, 390f, 48f),
                     "Time " + session.Scheduler.Now +
                     "  Clock " + (session.Scheduler.ClockRunning ? "running" : "stopped") +
@@ -660,11 +686,11 @@ namespace SiliconSandbox.Interaction
             {
                 var row = i / 9;
                 var column = i % 9;
-                var label = i < 9 ? Hotbar[i] : "";
+                var label = SlotLabel(i);
                 if (GUI.Button(new Rect(rect.x + 16f + column * 72f,
                     rect.y + 45f + row * 75f, 66f, 62f), label) && i < 9)
                 {
-                    selectedSlot = i;
+                    SelectSlot(i);
                     inventoryOpen = false;
                     player.SetInterfaceOpen(false);
                 }
