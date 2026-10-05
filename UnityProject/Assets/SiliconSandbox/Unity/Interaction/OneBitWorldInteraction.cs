@@ -1327,7 +1327,7 @@ namespace SiliconSandbox.Interaction
         private void DrawPauseMenu()
         {
             var rect = new Rect(Screen.width * 0.5f - 190f,
-                Screen.height * 0.5f - 115f, 380f, 230f);
+                Screen.height * 0.5f - 145f, 380f, 290f);
             GUI.Box(rect, "Simulation paused");
             GUI.Label(new Rect(rect.x + 20f, rect.y + 45f, 140f, 28f),
                 "World clock Hz:");
@@ -1338,8 +1338,21 @@ namespace SiliconSandbox.Interaction
                 TryEdit(() => session.Scheduler.SetFrequency(frequencyText));
             if (GUI.Button(new Rect(rect.x + 195f, rect.y + 85f, 155f, 32f),
                 "Reset Simulation"))
-                TryEdit(() => session.Scheduler.ResetSimulation());
-            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 155f, 170f, 40f),
+                TryEdit(() =>
+                {
+                    session.Scheduler.ResetSimulation();
+                    session.Scheduler.PauseSimulation();
+                });
+            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 135f,
+                155f, 36f), "Step clock edge"))
+                TryEdit(() => session.Scheduler.StepClockEdge());
+            if (GUI.Button(new Rect(rect.x + 195f, rect.y + 135f,
+                155f, 36f), "Step full cycle"))
+                TryEdit(() => session.Scheduler.StepClockCycle());
+            GUI.Label(new Rect(rect.x + 20f, rect.y + 184f, 340f, 28f),
+                "Settled time " + session.Scheduler.Now +
+                "   CLK " + session.Scheduler.ClockLevel.ToSymbol());
+            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 230f, 170f, 40f),
                 "Resume"))
             {
                 session.Scheduler.ResumeSimulation();
