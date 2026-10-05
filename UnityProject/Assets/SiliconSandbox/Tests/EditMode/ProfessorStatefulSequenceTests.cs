@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using NUnit.Framework;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
@@ -78,9 +79,18 @@ namespace SiliconSandbox.Tests.EditMode
 
             var before = session.Design;
             var saved = context.Capture(new SavedPlayerPose(20, 2, 20, 0, 0, 1));
-            var reopened = OneBitWorldContext.Open(saved);
-            Assert.That(reopened.Session.Design, Is.SameAs(before),
-                "This test checks the save boundary; file encoding is separate.");
+            var archive = WorldV1ArchiveCodec.Write(saved);
+            LoadedWorldV1Archive loaded;
+            using (var input = new MemoryStream(archive))
+                loaded = WorldV1ArchiveCodec.Read(input);
+            Assert.That(loaded.UnavailableModuleVersionIds, Is.Empty);
+            var reopened = OneBitWorldContext.Open(loaded.Snapshot);
+            Assert.That(reopened.Session.Design.Components.Count,
+                Is.EqualTo(before.Components.Count));
+            Assert.That(reopened.Session.Design.Modules.Count,
+                Is.EqualTo(before.Modules.Count));
+            Assert.That(reopened.Session.ModuleVersions.ContainsKey(
+                version.VersionId), Is.True);
             Assert.That(reopened.Session.Design.Modules[0].InstanceId,
                 Is.EqualTo(a.InstanceId));
             Assert.That(reopened.Session.Design.Modules[1].InstanceId,
