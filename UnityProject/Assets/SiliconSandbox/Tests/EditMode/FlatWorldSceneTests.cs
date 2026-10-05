@@ -10,6 +10,22 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class FlatWorldSceneTests
     {
         [Test]
+        public void StandardPresetHasUncappedReferenceOptions()
+        {
+            var standard = System.Array.IndexOf(QualitySettings.names, "Standard");
+            Assert.That(standard, Is.GreaterThanOrEqualTo(0));
+            var before = QualitySettings.GetQualityLevel();
+            try
+            {
+                QualitySettings.SetQualityLevel(standard, true);
+                Assert.That(QualitySettings.vSyncCount, Is.EqualTo(0));
+                Assert.That(QualitySettings.antiAliasing, Is.EqualTo(0));
+                Assert.That(QualitySettings.shadowDistance, Is.EqualTo(20f));
+            }
+            finally { QualitySettings.SetQualityLevel(before, true); }
+        }
+
+        [Test]
         public void AuthoredSmokeSceneHasLevelFloorAndCamera()
         {
             var scene = EditorSceneManager.OpenScene(SliceZeroBuild.ScenePath);

@@ -97,3 +97,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Require every route segment to be placed manually before the small circuit can be built; (2) provide a two-target one-bit wire shortcut that previews and commits an available path atomically, while retaining authored nodes, spans, channels, and explicit joins.
 
 **Recommendation adopted:** Option 2 makes the professor circuit practical to build without changing the saved topology or the separate junction/crossing rules. The shortcut does not make contact alone electrically meaningful. Recorded in [building controls](../docs/building-and-interface.md#default-controls).
+
+## 5 October 2026 — Concrete Standard graphics preset
+
+**Issue:** The benchmark requires a default Standard preset at 1080p, but the new Unity project still had the template's Medium and Ultra quality levels, with Ultra selected for standalone builds. Measurements would not be comparable without fixing the actual level.
+
+**Options:** (1) Use the template's Ultra level as Standard; (2) use its Medium level as Standard and disable VSync for the accepted uncapped measurement.
+
+**Recommendation adopted:** Option 2 keeps the first-playable visuals readable while giving the 1,000-gate scene a realistic baseline. The concrete options and required reporting are recorded in [performance and platforms](../docs/performance-and-platforms.md#benchmark). A measured failure still requires optimization or an explicitly approved criterion revision.

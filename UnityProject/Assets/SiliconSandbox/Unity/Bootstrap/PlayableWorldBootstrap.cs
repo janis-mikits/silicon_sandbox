@@ -56,12 +56,21 @@ namespace SiliconSandbox.Bootstrap
             Interaction.Attach(Session, controller, Inventory);
 
             var output = Environment.GetEnvironmentVariable(SmokeOutputVariable);
-            if (string.IsNullOrEmpty(output)) return;
-            var valid = Session.Circuit != null && Session.Design.Components.Count == 0 &&
-                WorldView.Session == Session && Interaction.Session == Session &&
-                GetComponent<Collider>() != null;
-            File.WriteAllText(output, valid ? "PASS\n" : "FAIL\n");
-            UnityEngine.Application.Quit(valid ? 0 : 1);
+            if (!string.IsNullOrEmpty(output))
+            {
+                var valid = Session.Circuit != null &&
+                    Session.Design.Components.Count == 0 &&
+                    WorldView.Session == Session && Interaction.Session == Session &&
+                    GetComponent<Collider>() != null;
+                File.WriteAllText(output, valid ? "PASS\n" : "FAIL\n");
+                UnityEngine.Application.Quit(valid ? 0 : 1);
+                return;
+            }
+            var benchmarkOutput = Environment.GetEnvironmentVariable(
+                FirstPlayableBenchmarkRunner.OutputVariable);
+            if (!string.IsNullOrEmpty(benchmarkOutput))
+                gameObject.AddComponent<FirstPlayableBenchmarkRunner>()
+                    .Initialize(this, benchmarkOutput);
         }
 
         public WorldSaveSnapshot CaptureCurrentWorld()
