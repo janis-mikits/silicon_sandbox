@@ -17,6 +17,49 @@ namespace SiliconSandbox.Tests.PlayMode
     public sealed class PlayableWorldPlayTests
     {
         [UnityTest]
+        public IEnumerator ConnectorEditAcrossRenderRegionBoundaryKeepsDistantGraphics()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var bootstrap = GameObject.Find(FlatWorldSmoke.FloorName)
+                .GetComponent<PlayableWorldBootstrap>();
+            var session = bootstrap.Session;
+            Assert.That(OneBitWorldView.RenderRegionSizeCells, Is.EqualTo(16));
+            session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(15, 1, 6), GridOrientation.Default);
+            session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(25, 1, 25), GridOrientation.Default);
+            var near = session.Design.Components[0];
+            var distant = session.Design.Components[1];
+            yield return null;
+            var region = bootstrap.WorldView.transform.Find(
+                "Authored world graphics/Render region 1,1");
+            Assert.That(region, Is.Not.Null);
+            var distantGraphics = region.Find("Component graphics " +
+                distant.Id.ToString("D"));
+            Assert.That(distantGraphics, Is.Not.Null);
+
+            session.PlaceWireStub(JoinMember.ComponentPin(near.Id,
+                near.PinIds["Y"]), new GridCell(17, 1, 6));
+            var route = session.Design.Topology.Connectors[0];
+            var crossesBoundary = false;
+            foreach (var node in route.Nodes)
+                if (node.Cell.X >= 16) crossesBoundary = true;
+            Assert.That(crossesBoundary, Is.True);
+            yield return null;
+            Assert.That(region.Find("Component graphics " +
+                distant.Id.ToString("D")), Is.SameAs(distantGraphics));
+            session.BreakSpan(route.Id, route.Spans[0].Id);
+            yield return null;
+            Assert.That(region.Find("Component graphics " +
+                distant.Id.ToString("D")), Is.SameAs(distantGraphics));
+            Assert.That(session.TryUndo(), Is.True);
+            yield return null;
+            Assert.That(region.Find("Component graphics " +
+                distant.Id.ToString("D")), Is.SameAs(distantGraphics));
+        }
+
+        [UnityTest]
         public IEnumerator DamagedManualCanReopenTimestampedAutosaveInScene()
         {
             SceneManager.LoadScene("PlayableWorld");

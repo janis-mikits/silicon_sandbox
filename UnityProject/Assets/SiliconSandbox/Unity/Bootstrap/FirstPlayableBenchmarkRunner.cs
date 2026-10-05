@@ -8,6 +8,7 @@ using System.Text;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Persistence;
+using SiliconSandbox.Presentation;
 using UnityEngine;
 using UnityEngine.Profiling;
 using Debug = UnityEngine.Debug;
@@ -143,7 +144,7 @@ namespace SiliconSandbox.Bootstrap
                 snapshot.Design.Topology.Connectors.Count +
                 " visible spans=" + segments +
                 " harness width=1 registers=0");
-            report.AppendLine("Rendered scene objects=" +
+            report.AppendLine("Total renderer objects=" +
                 FindObjectsByType<Renderer>(FindObjectsSortMode.None).Length);
             report.AppendLine("Camera path: stationary (30,0.3,12) facing east;" +
                 " flying linear (8,0.3,5)->(100,0.3,60), looking 12 cells ahead.");
@@ -193,6 +194,7 @@ namespace SiliconSandbox.Bootstrap
             var measuredStart = 0d;
             BigInteger startingEdges = BigInteger.Zero;
             var sampling = false;
+            var visibleAtStart = 0;
             while (true)
             {
                 yield return null;
@@ -207,7 +209,9 @@ namespace SiliconSandbox.Bootstrap
                 if (!sampling && elapsed >= WarmupSeconds)
                 {
                     sampling = true;
-                    measuredStart = now;
+                    visibleAtStart = CountVisibleRenderers();
+                    measuredStart = Time.realtimeSinceStartupAsDouble;
+                    last = measuredStart;
                     startingEdges = session.Scheduler.ClockEdgesProcessed;
                     simulationTicks = 0L;
                     continue;
@@ -226,6 +230,7 @@ namespace SiliconSandbox.Bootstrap
             }
             session.Scheduler.StopClock();
             var seconds = last - measuredStart;
+            var visibleAtEnd = CountVisibleRenderers();
             var metrics = new FirstPlayableFrameMetrics(samples, seconds);
             var edges = session.Scheduler.ClockEdgesProcessed - startingEdges;
             report.AppendLine("CASE=" + name +
@@ -240,6 +245,8 @@ namespace SiliconSandbox.Bootstrap
                 " achieved cycles/s=" + F((double)edges / 2d / seconds) +
                 " simulation CPU ms=" + F(simulationTicks * 1000d /
                     Stopwatch.Frequency) +
+                " visible renderers start/end=" + visibleAtStart + "/" +
+                    visibleAtEnd +
                 " main-thread mean ms=" + MeanOrUnavailable(mainThreadMs) +
                 " GPU mean ms=" + MeanOrUnavailable(gpuMs) +
                 " reserved memory MiB=" + F(
@@ -247,12 +254,25 @@ namespace SiliconSandbox.Bootstrap
             File.WriteAllText(outputPath, report.ToString());
         }
 
+        private int CountVisibleRenderers()
+        {
+            var planes = GeometryUtility.CalculateFrustumPlanes(view);
+            var count = 0;
+            foreach (var renderer in FindObjectsByType<Renderer>(
+                FindObjectsSortMode.None))
+                if (renderer.enabled && renderer.gameObject.activeInHierarchy &&
+                    GeometryUtility.TestPlanesAABB(planes, renderer.bounds))
+                    count++;
+            return count;
+        }
+
         private IEnumerator RunOperations()
         {
             report.AppendLine("Edit positions: (15,1,50)->(17,1,50) and" +
                 " (31,1,50)->(33,1,50), crossing x=16 and x=32 grid lines.");
-            report.AppendLine("Renderer has per-object reconciliation, no spatial" +
-                " render-region partition; a region-boundary claim is unverified.");
+            report.AppendLine("Renderer region width=" +
+                OneBitWorldView.RenderRegionSizeCells +
+                " cells; keyed per-object reconciliation retains distant objects.");
             foreach (var x in new[] { 15, 31 })
             {
                 var start = Stopwatch.GetTimestamp();

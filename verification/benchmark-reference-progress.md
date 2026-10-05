@@ -35,3 +35,27 @@ Verification: **192 Edit Mode passed, 15 Play Mode passed, Mac build, startup, b
 Every case warmed for ten seconds and measured for at least 60 seconds. All four Mac averages exceed 60 FPS and all p99 values are below the 33.3 ms investigation threshold. Both active cases processed the complete 1,200-edge, 10 Hz nominal 60-second schedule. The report divides by the slightly extended final-frame window and shows 9.999 and 10.000 cycles/s respectively; this is measurement-window rounding, not a dropped edge. Simulation CPU work over each active 60-second case was 446–503 ms. Reserved memory reached 190 MiB.
 
 At two scripted grid lines, place AND took 31–34 ms, place connector 43–46 ms, break connector 41–45 ms, and undo 20–21 ms. Manual save took 172 ms; load through first rendered frame took 299 ms. All measured operations met their provisional budgets. The renderer currently reconciles objects by identity and has no spatial render-region partition, so the prescribed *render-region boundary* edit check is still unverified. The report counts all renderer objects, not the per-camera visible subset. Additional sparse/dense shape comparisons, a manual visual walkthrough, and Windows measurements have not run. The user temporarily waived Windows verification; no Windows result or full cross-platform acceptance is claimed. CI remains unrun without a safely configured licensed runner.
+
+## Post-region Mac acceptance run, 5 October 2026
+
+The first strict run above motivated one more renderer change: presentation objects are now grouped under 16 × 16-cell region roots, retaining keyed per-object reconciliation. A new Play Mode test crosses x=16 with a connector and verifies a distant region's graphics are not rebuilt. The benchmark now reports camera-frustum-visible renderer counts at both ends of each case. The same frozen archive and camera path were used; no benchmark input or thresholds changed.
+
+Commands and result:
+
+```sh
+scripts/verify-unity.sh --editor '/Applications/Unity/Hub/Editor/6000.3.24f1/Unity.app/Contents/MacOS/Unity' --target StandaloneOSX
+scripts/benchmark-mac.sh
+```
+
+The first command passed **192 Edit Mode, 16 Play Mode, macOS build, startup, save/reopen, and exit-autosave**. The second printed `Strict Mac numerical frame, clock, edit, save and load gates passed.` Its ignored raw report is `UnityProject/Logs/Verification/benchmark-mac-reference-20261005T175326Z.txt`.
+
+| Case | Average FPS | p99 ms | Max ms | Edges | Visible renderers start/end |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Idle/stationary | 233.419 | 4.994 | 87.161 | 0 | 4,800 / 4,800 |
+| Active/stationary | 197.985 | 7.239 | 9.163 | 1,200 | 4,800 / 4,800 |
+| Idle/flying | 749.794 | 5.742 | 9.491 | 0 | 6,483 / 139 |
+| Active/flying | 653.625 | 6.876 | 9.170 | 1,200 | 6,483 / 139 |
+
+All cases used 1920×1080 Standard with 10-second warm-up and at least 60 seconds measured. All four Mac FPS and p99 criteria passed; all required active edges were processed. The isolated 87.161 ms maximum in idle/stationary is recorded as a visible outlier even though its p99 is 4.994 ms. Eight place/break/undo operations across actual x=16 and x=32 region lines took 21–46 ms; manual save took 172 ms and load through the first rendered frame 299 ms. The largest reserved-memory reading was 188 MiB. The report records per-case main-thread and GPU means, the exact quality options, hardware, activity, structural counts, and visible-object counts.
+
+This is a **Mac numerical performance pass** on the measured M4. It does not establish Windows performance, a representative ordinary Steam PC, a manual visual professor demonstration, sparse/dense renderer-shape comparisons, or a running CI job. Those remain open; Windows is temporarily waived by the user.

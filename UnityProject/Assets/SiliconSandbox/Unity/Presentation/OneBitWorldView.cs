@@ -12,6 +12,9 @@ namespace SiliconSandbox.Presentation
     // never stores or derives electrical joins from renderer geometry.
     public sealed class OneBitWorldView : MonoBehaviour
     {
+        public const int RenderRegionSizeCells = 16;
+        private readonly Dictionary<Vector2Int, Transform> regionRoots =
+            new Dictionary<Vector2Int, Transform>();
         private readonly Dictionary<Guid, List<Renderer>> routeBodies =
             new Dictionary<Guid, List<Renderer>>();
         private readonly Dictionary<Guid, JoinMember> routeFirstMembers =
@@ -62,6 +65,7 @@ namespace SiliconSandbox.Presentation
             session = activeSession ?? throw new ArgumentNullException(nameof(activeSession));
             if (generatedRoot != null) Retire(generatedRoot.gameObject);
             generatedRoot = null;
+            regionRoots.Clear();
             drawnComponents.Clear();
             drawnModules.Clear();
             drawnModuleAvailability.Clear();
@@ -102,6 +106,20 @@ namespace SiliconSandbox.Presentation
             shownRevision = session.Revision;
         }
 
+        // Presentation-only partition: electrical joins and authored IDs stay
+        // in the Core design. A route may extend beyond its owner's region.
+        private Transform RegionRoot(GridCell cell)
+        {
+            var key = new Vector2Int(cell.X / RenderRegionSizeCells,
+                cell.Z / RenderRegionSizeCells);
+            if (regionRoots.TryGetValue(key, out var existing))
+                return existing;
+            var root = new GameObject("Render region " + key.x + "," + key.y);
+            root.transform.SetParent(generatedRoot, false);
+            regionRoots.Add(key, root.transform);
+            return root.transform;
+        }
+
         private void ReconcileComponents()
         {
             var next = new Dictionary<Guid, PlacedOneBitComponent>();
@@ -122,7 +140,7 @@ namespace SiliconSandbox.Presentation
                 {
                     var root = new GameObject("Component graphics " +
                         pair.Key.ToString("D"));
-                    root.transform.SetParent(generatedRoot, false);
+                    root.transform.SetParent(RegionRoot(pair.Value.AnchorCell), false);
                     componentRoots.Add(pair.Key, root);
                     DrawComponent(pair.Value, root.transform);
                 }
@@ -153,7 +171,7 @@ namespace SiliconSandbox.Presentation
                 {
                     var root = new GameObject("Module graphics " +
                         pair.Key.ToString("D"));
-                    root.transform.SetParent(generatedRoot, false);
+                    root.transform.SetParent(RegionRoot(pair.Value.AnchorCell), false);
                     moduleRoots.Add(pair.Key, root);
                     DrawModule(pair.Value, root.transform);
                 }
@@ -213,7 +231,7 @@ namespace SiliconSandbox.Presentation
                 {
                     var item = pair.Value;
                     var marker = Primitive("Junction " + item.NodeId.ToString("D"),
-                        PrimitiveType.Sphere, generatedRoot);
+                        PrimitiveType.Sphere, RegionRoot(item.Cell));
                     marker.transform.position = RoutePosition(item.Cell,
                         item.PointQ, item.Channel);
                     marker.transform.localScale = Vector3.one * 0.34f;
@@ -352,7 +370,7 @@ namespace SiliconSandbox.Presentation
         private void DrawRoute(ConnectorRoute route)
         {
             var root = new GameObject("Connector " + route.Id.ToString("D"));
-            root.transform.SetParent(generatedRoot, false);
+            root.transform.SetParent(RegionRoot(route.Nodes[0].Cell), false);
             routeRoots.Add(route.Id, root);
             var renderers = new List<Renderer>();
             routeBodies.Add(route.Id, renderers);
