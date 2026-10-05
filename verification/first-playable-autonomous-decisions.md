@@ -2,6 +2,14 @@
 
 This log records only new game or material cross-system choices that would normally have required the user's decision. The user authorized choosing the recommended option during the extended first-playable implementation. Routine code choices are omitted; the canonical document linked for each entry governs behavior.
 
+## 5 October 2026 — Exact version 1 appearance and port JSON shapes
+
+**Issue:** The accepted schema requires a component `appearance`, module `bitOrder`, and typed `bitTargets`, but leaves their literal JSON shapes unspecified. A writer and strict reader must agree before a save becomes durable.
+
+**Options:** (1) Store an asset filename, implicit one-bit order, and flattened target fields; (2) use a durable built-in style ID, explicit `"lsb0"`, and a typed endpoint nested under `target`.
+
+**Recommendation adopted:** Option 2. Built-in components save `appearance:{"styleId":"builtin.component.default"}`; width-1 module ports and interface snapshots save `bitOrder:"lsb0"`; each bit mapping saves `{"portBitIndex":0,"target":{...}}`. These shapes preserve authored meaning when art or future port widths change. Recorded in the [version 1 schema](../docs/first-playable-data-schema.md#shared-authored-design) and [module ports](../docs/first-playable-data-schema.md#module-versions-and-instances).
+
 ## 5 October 2026 — Stable generated floor and wall style IDs
 
 **Issue:** Version 1 saves exact `floorMaterialId` and `wallStyleId` values, while the accepted default sandstone floor and wooden boundary had no durable IDs. Depending on mutable asset filenames would make existing saves change meaning after an art rename.
