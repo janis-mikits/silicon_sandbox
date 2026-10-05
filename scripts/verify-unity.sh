@@ -66,4 +66,17 @@ player="$project/Builds/macOS/SiliconSandbox.app/Contents/MacOS/SiliconSandbox"
 [[ -x "$player" ]] || { echo 'macOS player executable is missing.' >&2; exit 1; }
 SILICON_SANDBOX_SMOKE_OUTPUT="$logs/player-smoke.txt" "$player" -batchmode -nographics -logFile "$logs/player.log"
 [[ "$(cat "$logs/player-smoke.txt")" == PASS ]] || { echo 'Built-player smoke check failed.' >&2; exit 1; }
-echo 'Unity Edit Mode, Play Mode, macOS build and player checks passed.'
+storage_smoke="$logs/persistence-smoke"
+mkdir -p "$storage_smoke"
+: > "$storage_smoke/result.txt"
+SILICON_SANDBOX_PERSISTENCE_SMOKE_OUTPUT="$storage_smoke/result.txt" \
+  "$player" -batchmode -nographics -logFile "$logs/persistence-player.log"
+[[ -s "$storage_smoke/result.txt" ]] || { echo 'Built-player persistence result is missing.' >&2; exit 1; }
+read -r smoke_result smoke_world_id < "$storage_smoke/result.txt"
+[[ "$smoke_result" == PASS ]] || { echo 'Built-player save/reopen check failed.' >&2; exit 1; }
+[[ -s "$storage_smoke/worlds/$smoke_world_id.ssworld" ]] || { echo 'Built-player world archive is missing.' >&2; exit 1; }
+[[ -n "$(find "$storage_smoke/worlds/autosaves/$smoke_world_id" -name '*.ssworld' -print -quit)" ]] || {
+  echo 'Built-player normal-exit autosave is missing.' >&2
+  exit 1
+}
+echo 'Unity Edit Mode, Play Mode, macOS build, player startup, save/reopen, and exit-autosave checks passed.'

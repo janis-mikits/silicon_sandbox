@@ -13,6 +13,8 @@ namespace SiliconSandbox.Bootstrap
     public sealed class PlayableWorldBootstrap : MonoBehaviour
     {
         private const string SmokeOutputVariable = "SILICON_SANDBOX_SMOKE_OUTPUT";
+        private const string PersistenceSmokeOutputVariable =
+            "SILICON_SANDBOX_PERSISTENCE_SMOKE_OUTPUT";
 
         public OneBitWorldContext Context { get; private set; }
         public OneBitWorldSession Session { get; private set; }
@@ -83,11 +85,46 @@ namespace SiliconSandbox.Bootstrap
                 UnityEngine.Application.Quit(valid ? 0 : 1);
                 return;
             }
+            var persistenceOutput = Environment.GetEnvironmentVariable(
+                PersistenceSmokeOutputVariable);
+            if (!string.IsNullOrEmpty(persistenceOutput))
+            {
+                RunPersistenceSmoke(persistenceOutput);
+                return;
+            }
             var benchmarkOutput = Environment.GetEnvironmentVariable(
                 FirstPlayableBenchmarkRunner.OutputVariable);
             if (!string.IsNullOrEmpty(benchmarkOutput))
                 gameObject.AddComponent<FirstPlayableBenchmarkRunner>()
                     .Initialize(this, benchmarkOutput);
+        }
+
+        private void RunPersistenceSmoke(string outputPath)
+        {
+            try
+            {
+                var root = Path.GetDirectoryName(Path.GetFullPath(outputPath));
+                SetStorageRootForVerification(root);
+                Session.PlaceComponent(BuiltInPinCatalog.And,
+                    new GridCell(6, 1, 6), GridOrientation.Default);
+                var id = Session.Design.Components[0].Id;
+                SaveCurrentWorldFile();
+                ReopenCurrentWorldFile();
+                if (Session.Design.Components.Count != 1 ||
+                    Session.Design.Components[0].Id != id ||
+                    !Session.Scheduler.Now.Equals(
+                        SiliconSandbox.Simulation.SimulationTime.Zero))
+                    throw new InvalidDataException(
+                        "Built-player save/reopen lost authored state.");
+                File.WriteAllText(outputPath,
+                    "PASS " + Context.WorldId.ToString("D") + "\n");
+                UnityEngine.Application.Quit(0);
+            }
+            catch (Exception error)
+            {
+                File.WriteAllText(outputPath, "FAIL " + error.Message + "\n");
+                UnityEngine.Application.Quit(1);
+            }
         }
 
         public WorldSaveSnapshot CaptureCurrentWorld()
