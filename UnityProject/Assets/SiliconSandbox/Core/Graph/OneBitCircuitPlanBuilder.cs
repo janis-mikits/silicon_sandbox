@@ -54,7 +54,8 @@ namespace SiliconSandbox.Graph
                         throw new ArgumentException("Component pin identity is absent or repeated.");
                 }
                 if (component.TypeId == BuiltInPinCatalog.Source)
-                    sources.Add(new SourceBinding(component.Id, Index("OUT")));
+                    sources.Add(new SourceBinding(component.Id, Index("OUT"),
+                        component.SourceOnValue, component.SourceInitialOn));
                 else if (component.TypeId == BuiltInPinCatalog.And)
                     gates.Add(new AndBinding(component.Id, Index("A"), Index("B"), Index("Y")));
                 else if (component.TypeId == BuiltInPinCatalog.SrFlipFlop)

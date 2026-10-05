@@ -10,6 +10,8 @@ namespace SiliconSandbox.Authoring
     {
         public GridDirection Forward { get; }
         public GridDirection Up { get; }
+        public bool IsValid => Valid(Forward) && Valid(Up) &&
+            Dot(Vector(Forward), Vector(Up)) == 0;
         public static readonly GridOrientation Default =
             new GridOrientation(GridDirection.North, GridDirection.Up);
 
@@ -23,6 +25,7 @@ namespace SiliconSandbox.Authoring
 
         public GridCell TransformCellOffset(GridCell local)
         {
+            if (!IsValid) throw new InvalidOperationException("Invalid grid orientation.");
             var right = Cross(Vector(Up), Vector(Forward));
             var up = Vector(Up);
             var forward = Vector(Forward);

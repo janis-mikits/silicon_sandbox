@@ -10,10 +10,17 @@ namespace SiliconSandbox.Contracts
         public RuntimeObjectKey RuntimeKey { get; }
         public Guid ObjectId => RuntimeKey.LocalObjectId;
         public int OutputNet { get; }
-        public SourceBinding(Guid objectId, int outputNet)
-            : this(RuntimeObjectKey.World(objectId), outputNet) { }
-        public SourceBinding(RuntimeObjectKey runtimeKey, int outputNet)
-        { RuntimeKey = runtimeKey; OutputNet = outputNet; }
+        public LogicBit OnValue { get; }
+        public bool InitialOn { get; }
+        public SourceBinding(Guid objectId, int outputNet,
+            LogicBit onValue = LogicBit.One, bool initialOn = false)
+            : this(RuntimeObjectKey.World(objectId), outputNet, onValue, initialOn) { }
+        public SourceBinding(RuntimeObjectKey runtimeKey, int outputNet,
+            LogicBit onValue = LogicBit.One, bool initialOn = false)
+        {
+            RuntimeKey = runtimeKey; OutputNet = outputNet;
+            OnValue = onValue; InitialOn = initialOn;
+        }
     }
 
     public readonly struct AndBinding
@@ -90,7 +97,8 @@ namespace SiliconSandbox.Contracts
             var outputDriverIds = new HashSet<RuntimeDriverKey>();
             foreach (var source in sourceList)
             {
-                if (source.ObjectId == Guid.Empty || !ids.Add(source.RuntimeKey))
+                if (source.ObjectId == Guid.Empty || !ids.Add(source.RuntimeKey) ||
+                    source.OnValue > LogicBit.Z)
                     throw new ArgumentException("Duplicate or empty component identity.");
                 CheckNet(source.OutputNet);
                 outputDriverIds.Add(new RuntimeDriverKey(source.RuntimeKey, Guid.Empty));

@@ -34,11 +34,16 @@ namespace SiliconSandbox.Simulation
             worldClockLevel = reset ? LogicBit.Zero : previousWorldClockLevel;
             sources = new Dictionary<RuntimeObjectKey, ConstantLogicSource>();
             foreach (var binding in next.Sources)
-                sources.Add(binding.RuntimeKey, oldSources != null &&
-                    oldSources.TryGetValue(binding.RuntimeKey, out var existing)
-                    ? reset ? new ConstantLogicSource(existing.ConfiguredOnValue,
-                        existing.InitialOn) : existing
-                    : new ConstantLogicSource());
+            {
+                ConstantLogicSource source;
+                if (oldSources != null &&
+                    oldSources.TryGetValue(binding.RuntimeKey, out var existing))
+                    source = reset ? new ConstantLogicSource(existing.ConfiguredOnValue,
+                        existing.InitialOn) : existing;
+                else
+                    source = new ConstantLogicSource(binding.OnValue, binding.InitialOn);
+                sources.Add(binding.RuntimeKey, source);
+            }
             storage = new Dictionary<RuntimeObjectKey, OneBitSrFlipFlop>();
             newStorageIds = new HashSet<RuntimeObjectKey>();
             foreach (var binding in next.SrFlipFlops)

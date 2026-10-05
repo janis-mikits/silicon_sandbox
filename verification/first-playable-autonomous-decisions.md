@@ -49,3 +49,11 @@ This log records only new game or material cross-system choices that would norma
 **Options:** (1) Restart a full half-period on every resume; (2) preserve the remaining simulated time on ordinary stop/resume, but restart a full interval at the new frequency if the setting changes while stopped.
 
 **Recommendation adopted:** Option 2 makes P behave like a pause of the clock phase and ensures a stopped frequency change takes effect on the very next interval. A manual step consumes an edge and leaves the clock stopped at the start of the next interval. Recorded in [circuit time](../docs/circuit-time-and-clock.md#clock-and-event-model).
+
+## 5 October 2026 — Component placement in a connector cell
+
+**Issue:** The first-playable documents define four connector channels per cell and complete component footprints, but do not explicitly say whether a one-cell component can be placed on top of an already routed wire cell.
+
+**Options:** (1) Allow overlap and define per-shape collision checks now; (2) reject placement into any cell containing connector route geometry while allowing face attachment from adjacent cells.
+
+**Recommendation adopted:** Option 2 gives the first-playable placement preview a clear all-or-nothing occupancy rule without moving or hiding an existing wire. It leaves the four-channel rule for connector-only cells intact. Recorded in [physical connections](../docs/physical-connections.md#pins-and-targeting).

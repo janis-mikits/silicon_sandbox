@@ -13,20 +13,30 @@ namespace SiliconSandbox.Authoring
         public int TypeVersion { get; }
         public IReadOnlyDictionary<string, Guid> PinIds { get; }
         public LogicBit? InitialQ { get; }
+        public LogicBit SourceOnValue { get; }
+        public bool SourceInitialOn { get; }
 
         public OneBitComponent(Guid id, string typeId, int typeVersion,
-            IReadOnlyDictionary<string, Guid> pinIds, LogicBit? initialQ = null)
+            IReadOnlyDictionary<string, Guid> pinIds, LogicBit? initialQ = null,
+            LogicBit sourceOnValue = LogicBit.One, bool sourceInitialOn = false)
         {
             if (id == Guid.Empty || typeId == null || pinIds == null)
                 throw new ArgumentException("Invalid component identity or pins.");
             Id = id;
             TypeId = typeId;
             TypeVersion = typeVersion;
-            PinIds = new Dictionary<string, Guid>(pinIds);
+            PinIds = new System.Collections.ObjectModel.ReadOnlyDictionary<string, Guid>(
+                new Dictionary<string, Guid>(pinIds));
             if (initialQ.HasValue && (typeId != BuiltInPinCatalog.SrFlipFlop ||
                 initialQ.Value > LogicBit.Z))
                 throw new ArgumentException("Only an SR flip-flop may configure initial Q.");
+            if (sourceOnValue > LogicBit.Z ||
+                typeId != BuiltInPinCatalog.Source &&
+                (sourceOnValue != LogicBit.One || sourceInitialOn))
+                throw new ArgumentException("Invalid source configuration.");
             InitialQ = initialQ;
+            SourceOnValue = sourceOnValue;
+            SourceInitialOn = sourceInitialOn;
         }
 
         public Guid Pin(string key) => PinIds[key];
