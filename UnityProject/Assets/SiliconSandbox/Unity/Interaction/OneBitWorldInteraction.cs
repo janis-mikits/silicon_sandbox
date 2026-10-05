@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Contracts;
@@ -27,6 +28,8 @@ namespace SiliconSandbox.Interaction
         private int selectedSlot;
         private JoinMember? wireStart;
         private GameObject ghostRoot;
+        private GameObject rotationRoot;
+        private OneBitRotationPreview rotationPreview;
         private readonly List<Renderer> ghostRenderers = new List<Renderer>();
         private GridCell ghostCell;
         private GridOrientation ghostOrientation;
@@ -100,7 +103,32 @@ namespace SiliconSandbox.Interaction
                     ghostCached = false;
                 }
             TargetAtCrosshair();
+            if (rotationPreview != null)
+            {
+                HideGhost();
+                if (Input.GetKeyDown(KeyCode.Return) ||
+                    Input.GetKeyDown(KeyCode.KeypadEnter))
+                {
+                    var ready = rotationPreview;
+                    TryEdit(() => session.ConfirmRotation(ready));
+                    ClearRotationPreview();
+                }
+                else if (Input.GetKeyDown(KeyCode.Z) ||
+                    Input.GetKeyDown(KeyCode.X))
+                    BeginRotation(rotationPreview.ObjectId,
+                        Input.GetKeyDown(KeyCode.Z));
+                return;
+            }
             UpdateGhost();
+
+            if (hovered != null &&
+                (hovered.Kind == WorldPartKind.ComponentBody ||
+                 hovered.Kind == WorldPartKind.ModuleBody) &&
+                (Input.GetKeyDown(KeyCode.Z) || Input.GetKeyDown(KeyCode.X)))
+            {
+                BeginRotation(hovered.OwnerId, Input.GetKeyDown(KeyCode.Z));
+                return;
+            }
 
             if (Input.GetKeyDown(KeyCode.U))
                 TryEdit(() => { if (!session.TryUndo()) InvalidAction(); });
@@ -342,6 +370,112 @@ namespace SiliconSandbox.Interaction
         private void OnDestroy()
         {
             if (ghostRoot != null) Destroy(ghostRoot);
+            if (rotationRoot != null) Destroy(rotationRoot);
+        }
+
+        private void BeginRotation(Guid objectId, bool clockwise)
+        {
+            var orientation = GridOrientation.Default;
+            var found = false;
+            if (rotationPreview != null && rotationPreview.ObjectId == objectId)
+            {
+                orientation = rotationPreview.Orientation;
+                found = true;
+            }
+            else
+            {
+                foreach (var component in session.Design.Components)
+                    if (component.Id == objectId)
+                    { orientation = component.Orientation; found = true; break; }
+                foreach (var module in session.Design.Modules)
+                    if (module.Id == objectId)
+                    { orientation = module.Orientation; found = true; break; }
+            }
+            if (!found) { InvalidAction(); return; }
+            try
+            {
+                var next = clockwise ? orientation.ClockwiseYaw() :
+                    orientation.CounterclockwiseYaw();
+                var preview = session.PreviewRotation(objectId, next);
+                rotationPreview = preview;
+                DrawRotationPreview();
+                HideGhost();
+            }
+            catch (ArgumentException) { InvalidAction(); }
+            catch (InvalidOperationException) { InvalidAction(); }
+        }
+
+        private void DrawRotationPreview()
+        {
+            if (rotationRoot != null) Destroy(rotationRoot);
+            rotationRoot = new GameObject("Rotation preview");
+            foreach (var component in rotationPreview.Candidate.Components)
+                if (component.Id == rotationPreview.ObjectId)
+                {
+                    AddRotationPart(new Vector3(component.AnchorCell.X + 0.5f,
+                        component.AnchorCell.Y + 0.5f,
+                        component.AnchorCell.Z + 0.5f), Vector3.one * 0.85f,
+                        PrimitiveType.Cube, new Color(0.2f, 0.9f, 0.55f, 0.42f));
+                    foreach (var pin in component.BuildPins())
+                        AddRotationPart(PointPosition(pin.Cell, pin.PointQ),
+                            Vector3.one * 0.25f, PrimitiveType.Sphere,
+                            new Color(0.2f, 0.9f, 0.55f, 0.7f));
+                }
+            foreach (var module in rotationPreview.Candidate.Modules)
+                if (module.Id == rotationPreview.ObjectId)
+                {
+                    foreach (var cell in module.OccupiedCells())
+                        AddRotationPart(new Vector3(cell.X + 0.5f,
+                            cell.Y + 0.5f, cell.Z + 0.5f), Vector3.one * 0.88f,
+                            PrimitiveType.Cube,
+                            new Color(0.2f, 0.9f, 0.55f, 0.42f));
+                    foreach (var port in module.BuildPortBits())
+                        AddRotationPart(PointPosition(port.Cell, port.PointQ),
+                            Vector3.one * 0.25f, PrimitiveType.Sphere,
+                            new Color(0.2f, 0.9f, 0.55f, 0.7f));
+                }
+            foreach (var join in session.Design.Topology.Joins)
+            {
+                if (!rotationPreview.LostJoinIds.Contains(join.Id)) continue;
+                foreach (var member in join.Members)
+                    if (member.Kind == JoinTargetKind.ConnectorNode)
+                        foreach (var route in session.Design.Topology.Connectors)
+                            if (route.Id == member.OwnerId)
+                                foreach (var node in route.Nodes)
+                                    if (node.Id == member.PartId)
+                                        AddRotationPart(PointPosition(node.Cell,
+                                            node.PointQ), Vector3.one * 0.35f,
+                                            PrimitiveType.Sphere,
+                                            new Color(1f, 0.1f, 0.1f, 0.8f));
+            }
+        }
+
+        private static Vector3 PointPosition(GridCell cell, QuarterPoint point) =>
+            new Vector3(cell.X + point.X * 0.25f,
+                cell.Y + point.Y * 0.25f, cell.Z + point.Z * 0.25f);
+
+        private void AddRotationPart(Vector3 position, Vector3 scale,
+            PrimitiveType type, Color color)
+        {
+            var part = GameObject.CreatePrimitive(type);
+            part.transform.SetParent(rotationRoot.transform, false);
+            part.transform.position = position;
+            part.transform.localScale = scale;
+            Destroy(part.GetComponent<Collider>());
+            var renderer = part.GetComponent<Renderer>();
+            var shader = Shader.Find("Transparent/Diffuse");
+            if (shader != null) renderer.material = new Material(shader);
+            renderer.material.color = color;
+        }
+
+        private void ClearRotationPreview()
+        {
+            rotationPreview = null;
+            if (rotationRoot != null)
+            {
+                Destroy(rotationRoot);
+                rotationRoot = null;
+            }
         }
 
         private bool PlacementCell(out GridCell cell)
@@ -430,6 +564,11 @@ namespace SiliconSandbox.Interaction
 
         private void Escape()
         {
+            if (rotationPreview != null)
+            {
+                ClearRotationPreview();
+                return;
+            }
             if (configureOpen || inventoryOpen || pauseMenuOpen || inspectOpen)
             {
                 configureOpen = false;
@@ -480,6 +619,10 @@ namespace SiliconSandbox.Interaction
                         "Wire start selected. Aim at a free pin or connector node.");
                 QuickLook();
             }
+            if (rotationPreview != null)
+                GUI.Box(new Rect(Screen.width * 0.5f - 230f, 20f, 460f, 52f),
+                    "Rotation preview: " + rotationPreview.LostJoinIds.Count +
+                    " connector attachment(s) lost. Enter confirm; Esc cancel.");
             if (inventoryOpen) DrawInventory();
             if (configureOpen) DrawSourceConfigure();
             if (pauseMenuOpen) DrawPauseMenu();

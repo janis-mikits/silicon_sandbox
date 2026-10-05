@@ -183,9 +183,12 @@ namespace SiliconSandbox.Authoring
                     if (!bounds.ContainsPlaceable(node.Cell))
                         throw new ArgumentException("Connector route leaves world bounds.");
                     routeNodes.Add(node.Id, node);
+                    // A rotation may leave an old wire end on a component
+                    // face. It stays physically in place but is not joined to
+                    // the moved pin. Interior connector spans remain forbidden.
                     if (occupied.Contains(node.Cell) &&
-                        !IsAttachedPortFaceNode(topology, route.Id, node))
-                        throw new ArgumentException("A connector in an occupied cell must attach at its exact port face.");
+                        !node.PointQ.IsFacePoint)
+                        throw new ArgumentException("A connector inside an occupied cell must end on a face.");
                 }
                 foreach (var span in route.Spans)
                     if (routeNodes.TryGetValue(span.FromNodeId, out var from) &&
@@ -196,48 +199,6 @@ namespace SiliconSandbox.Authoring
             Components = objects.AsReadOnly();
             Modules = placedModules.AsReadOnly();
             Topology = topology;
-        }
-
-        private static bool IsAttachedPortFaceNode(OneBitAuthoredTopology topology,
-            Guid connectorId, RouteNode node)
-        {
-            var nodeRef = JoinMember.ConnectorNode(connectorId, node.Id);
-            foreach (var pin in topology.Pins)
-            {
-                if (!pin.Cell.Equals(node.Cell) || !pin.PointQ.Equals(node.PointQ))
-                    continue;
-                var pinRef = JoinMember.ComponentPin(pin.ObjectId, pin.PinId);
-                foreach (var join in topology.Joins)
-                {
-                    var hasNode = false;
-                    var hasPin = false;
-                    foreach (var member in join.Members)
-                    {
-                        if (member.Equals(nodeRef)) hasNode = true;
-                        if (member.Equals(pinRef)) hasPin = true;
-                    }
-                    if (hasNode && hasPin) return true;
-                }
-            }
-            foreach (var port in topology.ModulePorts)
-            {
-                if (!port.Cell.Equals(node.Cell) ||
-                    !port.PointQ.Equals(node.PointQ)) continue;
-                var portRef = JoinMember.ModulePortBit(port.ObjectId,
-                    port.PortId, port.BitIndex);
-                foreach (var join in topology.Joins)
-                {
-                    var hasNode = false;
-                    var hasPort = false;
-                    foreach (var member in join.Members)
-                    {
-                        if (member.Equals(nodeRef)) hasNode = true;
-                        if (member.Equals(portRef)) hasPort = true;
-                    }
-                    if (hasNode && hasPort) return true;
-                }
-            }
-            return false;
         }
 
         public static OneBitWorldDesign Empty(WorldBounds bounds) =>

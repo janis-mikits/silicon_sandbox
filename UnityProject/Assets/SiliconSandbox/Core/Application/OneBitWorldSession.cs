@@ -69,6 +69,23 @@ namespace SiliconSandbox.Application
                 anchorCell, orientation), version);
         }
 
+        public OneBitRotationPreview PreviewRotation(Guid objectId,
+            GridOrientation orientation)
+        {
+            SafePause();
+            return OneBitRotationEdits.Preview(Design, objectId, orientation,
+                Revision);
+        }
+
+        public void ConfirmRotation(OneBitRotationPreview preview)
+        {
+            if (preview == null) throw new ArgumentNullException(nameof(preview));
+            if (preview.BaseRevision != Revision)
+                throw new InvalidOperationException("Rotation preview is stale.");
+            SafePause();
+            Publish(preview.Candidate);
+        }
+
         public void BreakSpan(Guid connectorId, Guid spanId)
         {
             SafePause();

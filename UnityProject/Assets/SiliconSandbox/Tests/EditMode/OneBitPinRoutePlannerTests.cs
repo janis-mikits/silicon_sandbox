@@ -3,6 +3,7 @@ using NUnit.Framework;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Contracts;
+using SiliconSandbox.Graph;
 
 namespace SiliconSandbox.Tests.EditMode
 {
@@ -102,7 +103,7 @@ namespace SiliconSandbox.Tests.EditMode
         }
 
         [Test]
-        public void NodeInsideComponentCellWithoutExactPinJoinIsRejected()
+        public void UnjoinedFaceEndInsideComponentCellRemainsElectricallyOpen()
         {
             var world = OneBitWorldEdits.PlaceComponent(
                 OneBitWorldDesign.Empty(new WorldBounds(5, 3, 3)),
@@ -112,8 +113,20 @@ namespace SiliconSandbox.Tests.EditMode
                 world.Components[0].AnchorCell, 0, new QuarterPoint(4, 1, 1));
             var route = new ConnectorRoute(Guid.NewGuid(), "wire", 1,
                 new[] { unjoinedNode }, Array.Empty<RouteSpan>());
+            var withOpenEnd = OneBitWorldEdits.PlaceConnector(world, route,
+                Array.Empty<ElectricalJoin>());
+            var graph = OneBitTopologyGraphBuilder.Build(withOpenEnd.Topology);
+            Assert.That(graph.Connected(
+                JoinMember.ComponentPin(world.Components[0].Id,
+                    world.Components[0].PinIds["OUT"]),
+                JoinMember.ConnectorNode(route.Id, unjoinedNode.Id)), Is.False);
+            var interiorNode = new RouteNode(Guid.NewGuid(),
+                world.Components[0].AnchorCell, 1,
+                new QuarterPoint(2, 2, 2));
+            var interiorRoute = new ConnectorRoute(Guid.NewGuid(), "wire", 1,
+                new[] { interiorNode }, Array.Empty<RouteSpan>());
             Assert.Throws<ArgumentException>(() => OneBitWorldEdits.PlaceConnector(
-                world, route, Array.Empty<ElectricalJoin>()));
+                world, interiorRoute, Array.Empty<ElectricalJoin>()));
             Assert.That(world.Topology.Connectors.Count, Is.EqualTo(0));
         }
 
