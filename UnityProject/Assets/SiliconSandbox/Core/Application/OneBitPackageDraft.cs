@@ -11,14 +11,16 @@ namespace SiliconSandbox.Application
         private readonly List<OneBitPortChoice> ports;
 
         public CellRegion Region { get; }
+        public ulong BaseRevision { get; }
         public OneBitModuleSnapshot Snapshot { get; }
         public string Name { get; set; }
         public IReadOnlyList<OneBitPortChoice> Ports => ports.AsReadOnly();
 
         public OneBitPackageDraft(OneBitWorldDesign world, CellRegion region,
-            string proposedName)
+            string proposedName, ulong baseRevision = 0)
         {
             Region = region;
+            BaseRevision = baseRevision;
             Snapshot = OneBitModuleSnapshotBuilder.Preview(world, region);
             ports = new List<OneBitPortChoice>(
                 OneBitPackageDefaults.ForSelection(Snapshot));

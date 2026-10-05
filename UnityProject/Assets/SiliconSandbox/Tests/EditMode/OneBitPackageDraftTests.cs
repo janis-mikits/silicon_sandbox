@@ -8,6 +8,23 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class OneBitPackageDraftTests
     {
         [Test]
+        public void SessionPreviewSettlesAndPausesWithoutPublishingThePackage()
+        {
+            var world = OneBitWorldEdits.PlaceComponent(OneBitWorldDesign.Empty(
+                new WorldBounds(8, 8, 4)), BuiltInPinCatalog.SrFlipFlop,
+                new GridCell(2, 1, 2), GridOrientation.Default);
+            var session = new OneBitWorldSession(world);
+            session.Scheduler.StartClock();
+            var draft = session.PreviewPackage(new CellRegion(
+                new GridCell(2, 1, 2), new GridCell(2, 1, 2)), "SR");
+            Assert.That(session.Scheduler.IsPaused, Is.True);
+            Assert.That(session.Design, Is.SameAs(world));
+            Assert.That(session.Revision, Is.EqualTo(0));
+            Assert.That(draft.BaseRevision, Is.EqualTo(session.Revision));
+            Assert.That(session.ModuleVersions.Count, Is.EqualTo(0));
+        }
+
+        [Test]
         public void SrDraftCanExposeOnlyApprovedFourDemonstrationPorts()
         {
             var world = OneBitWorldEdits.PlaceComponent(OneBitWorldDesign.Empty(

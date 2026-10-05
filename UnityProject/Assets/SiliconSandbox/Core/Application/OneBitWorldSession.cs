@@ -77,6 +77,14 @@ namespace SiliconSandbox.Application
                 Revision);
         }
 
+        public OneBitPackageDraft PreviewPackage(CellRegion region,
+            string proposedName)
+        {
+            SafePause();
+            return new OneBitPackageDraft(Design, region, proposedName,
+                Revision);
+        }
+
         public void ConfirmRotation(OneBitRotationPreview preview)
         {
             if (preview == null) throw new ArgumentNullException(nameof(preview));

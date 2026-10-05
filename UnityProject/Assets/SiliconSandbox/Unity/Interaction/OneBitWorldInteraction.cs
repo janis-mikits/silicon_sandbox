@@ -26,6 +26,12 @@ namespace SiliconSandbox.Interaction
         private GameObject ghostRoot;
         private GameObject rotationRoot;
         private OneBitRotationPreview rotationPreview;
+        private GameObject selectionRoot;
+        private GridCell? selectionFirst;
+        private GridCell? selectionSecond;
+        private OneBitPackageDraft packageDraft;
+        private string packageName = "Module";
+        private string packageError = "";
         private readonly List<Renderer> ghostRenderers = new List<Renderer>();
         private GridCell ghostCell;
         private GridOrientation ghostOrientation;
@@ -87,7 +93,8 @@ namespace SiliconSandbox.Interaction
                 player.SetInterfaceOpen(false);
                 return;
             }
-            if (configureOpen || inventoryOpen || pauseMenuOpen) return;
+            if (configureOpen || inventoryOpen || pauseMenuOpen ||
+                packageDraft != null) return;
             if (Input.GetKeyDown(KeyCode.E))
             {
                 inventoryOpen = true;
@@ -114,6 +121,36 @@ namespace SiliconSandbox.Interaction
                     Input.GetKeyDown(KeyCode.X))
                     BeginRotation(rotationPreview.ObjectId,
                         Input.GetKeyDown(KeyCode.Z));
+                return;
+            }
+            if (Input.GetKeyDown(KeyCode.R) && SelectionCell(out var first))
+            {
+                selectionFirst = first;
+                selectionSecond = null;
+                DrawSelectionPreview();
+            }
+            if (Input.GetKeyDown(KeyCode.T) && SelectionCell(out var second))
+            {
+                selectionSecond = second;
+                DrawSelectionPreview();
+            }
+            if ((Input.GetKeyDown(KeyCode.Return) ||
+                 Input.GetKeyDown(KeyCode.KeypadEnter)) &&
+                selectionFirst.HasValue && selectionSecond.HasValue)
+            {
+                try
+                {
+                    var region = new CellRegion(selectionFirst.Value,
+                        selectionSecond.Value);
+                    packageDraft = session.PreviewPackage(region, packageName);
+                    packageError = "";
+                    player.SetInterfaceOpen(true);
+                    HideGhost();
+                }
+                catch (ArgumentException exception)
+                { packageError = exception.Message; InvalidAction(); }
+                catch (NotSupportedException exception)
+                { packageError = exception.Message; InvalidAction(); }
                 return;
             }
             UpdateGhost();
@@ -413,6 +450,45 @@ namespace SiliconSandbox.Interaction
         {
             if (ghostRoot != null) Destroy(ghostRoot);
             if (rotationRoot != null) Destroy(rotationRoot);
+            if (selectionRoot != null) Destroy(selectionRoot);
+        }
+
+        private bool SelectionCell(out GridCell cell)
+        {
+            if (!hasHit) { cell = default; InvalidAction(); return false; }
+            if (hovered != null && hovered.Kind == WorldPartKind.ComponentBody)
+                foreach (var component in session.Design.Components)
+                    if (component.Id == hovered.OwnerId)
+                    { cell = component.AnchorCell; return true; }
+            if (hovered != null && hovered.Kind == WorldPartKind.ModuleBody)
+            {
+                var center = hit.collider.bounds.center;
+                cell = new GridCell(Mathf.FloorToInt(center.x),
+                    Mathf.FloorToInt(center.y), Mathf.FloorToInt(center.z));
+                return true;
+            }
+            return PlacementCell(out cell);
+        }
+
+        private void DrawSelectionPreview()
+        {
+            if (selectionRoot != null) Destroy(selectionRoot);
+            if (!selectionFirst.HasValue) return;
+            var region = new CellRegion(selectionFirst.Value,
+                selectionSecond ?? selectionFirst.Value);
+            selectionRoot = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            selectionRoot.name = "Package region preview";
+            selectionRoot.transform.position = new Vector3(
+                (region.Min.X + region.Max.X + 1) * 0.5f,
+                (region.Min.Y + region.Max.Y + 1) * 0.5f,
+                (region.Min.Z + region.Max.Z + 1) * 0.5f);
+            selectionRoot.transform.localScale = new Vector3(
+                region.SizeCells.X, region.SizeCells.Y, region.SizeCells.Z);
+            Destroy(selectionRoot.GetComponent<Collider>());
+            var renderer = selectionRoot.GetComponent<Renderer>();
+            var shader = Shader.Find("Transparent/Diffuse");
+            if (shader != null) renderer.material = new Material(shader);
+            renderer.material.color = new Color(0.15f, 0.55f, 1f, 0.14f);
         }
 
         private void BeginRotation(Guid objectId, bool clockwise)
@@ -669,6 +745,13 @@ namespace SiliconSandbox.Interaction
 
         private void Escape()
         {
+            if (packageDraft != null)
+            {
+                packageDraft = null;
+                packageError = "";
+                player.SetInterfaceOpen(false);
+                return;
+            }
             if (rotationPreview != null)
             {
                 ClearRotationPreview();
@@ -695,7 +778,7 @@ namespace SiliconSandbox.Interaction
         private void OnGUI()
         {
             if (session == null) return;
-            if (hudVisible)
+            if (hudVisible && packageDraft == null)
             {
                 GUI.Label(new Rect(Screen.width * 0.5f - 8f,
                     Screen.height * 0.5f - 10f, 18f, 18f), "+");
@@ -727,10 +810,18 @@ namespace SiliconSandbox.Interaction
                 GUI.Box(new Rect(Screen.width * 0.5f - 230f, 20f, 460f, 52f),
                     "Rotation preview: " + rotationPreview.LostJoinIds.Count +
                     " connector attachment(s) lost. Enter confirm; Esc cancel.");
+            if (packageDraft == null && selectionFirst.HasValue)
+                GUI.Label(new Rect(12f, 142f, 500f, 25f),
+                    selectionSecond.HasValue
+                        ? "Region selected. Enter previews package ports."
+                        : "First region corner selected. Aim and press T.");
+            if (packageDraft == null && packageError.Length > 0)
+                GUI.Label(new Rect(12f, 170f, 600f, 45f), packageError);
             if (inventoryOpen) DrawInventory();
             if (configureOpen) DrawSourceConfigure();
             if (pauseMenuOpen) DrawPauseMenu();
             if (inspectOpen) DrawInspect();
+            if (packageDraft != null) DrawPackagePreview();
         }
 
         private void QuickLook()
@@ -773,6 +864,184 @@ namespace SiliconSandbox.Interaction
                     player.SetInterfaceOpen(false);
                 }
             }
+        }
+
+        private void DrawPackagePreview()
+        {
+            var rect = new Rect((Screen.width - 940f) * 0.5f,
+                (Screen.height - 690f) * 0.5f, 940f, 690f);
+            GUI.Box(rect, "Package configuration preview");
+            GUI.Box(new Rect(rect.x + 15f, rect.y + 28f, 910f, 118f),
+                "Captured circuit and exact port candidates");
+            var size = packageDraft.Snapshot.SizeCells;
+            GUI.Label(new Rect(rect.x + 30f, rect.y + 55f, 850f, 50f),
+                "Size " + size.X + " × " + size.Y + " × " + size.Z +
+                " cells; " + packageDraft.Snapshot.Components.Count +
+                " components; " + packageDraft.Snapshot.Topology.Connectors.Count +
+                " copied connectors; " +
+                packageDraft.Snapshot.PortCandidates.Count +
+                " exposed endpoints. Source world remains unchanged.");
+            GUI.Label(new Rect(rect.x + 30f, rect.y + 112f, 130f, 25f),
+                "Module name:");
+            packageName = GUI.TextField(new Rect(rect.x + 155f, rect.y + 110f,
+                300f, 27f), packageName);
+            packageDraft.Name = packageName;
+            var faces = new[] { GridDirection.West, GridDirection.East,
+                GridDirection.North, GridDirection.South, GridDirection.Up,
+                GridDirection.Down };
+            for (var faceIndex = 0; faceIndex < faces.Length; faceIndex++)
+            {
+                var face = faces[faceIndex];
+                var box = new Rect(rect.x + 15f + faceIndex % 3 * 305f,
+                    rect.y + 160f + faceIndex / 3 * 215f, 295f, 205f);
+                GUI.Box(box, GridOrientation.FaceName(face));
+                var row = 0;
+                for (var i = 0; i < packageDraft.Ports.Count; i++)
+                {
+                    var choice = packageDraft.Ports[i];
+                    if (PortFace(choice.PointQ) != face) continue;
+                    if (row >= 5) break;
+                    var y = box.y + 28f + row++ * 32f;
+                    var name = GUI.TextField(new Rect(box.x + 7f, y, 68f, 26f),
+                        choice.Name);
+                    if (name != choice.Name)
+                        packageDraft.ReplacePort(i, new OneBitPortChoice(name,
+                            choice.Direction, choice.LocalCell, choice.PointQ,
+                            choice.BitZeroTarget));
+                    if (GUI.Button(new Rect(box.x + 79f, y, 48f, 26f),
+                        choice.Direction.ToString().Substring(0, 2)))
+                    {
+                        var next = (OneBitPortDirection)
+                            (((int)choice.Direction + 1) % 3);
+                        packageDraft.ReplacePort(i, new OneBitPortChoice(
+                            name, next, choice.LocalCell, choice.PointQ,
+                            choice.BitZeroTarget));
+                    }
+                    if (GUI.Button(new Rect(box.x + 130f, y, 60f, 26f),
+                        EndpointName(choice.BitZeroTarget)))
+                        CyclePortMapping(i);
+                    if (GUI.Button(new Rect(box.x + 193f, y, 54f, 26f),
+                        "Face >")) MovePortToNextFace(i);
+                    if (GUI.Button(new Rect(box.x + 250f, y, 35f, 26f), "X"))
+                    { packageDraft.RemovePort(i); break; }
+                }
+            }
+            GUI.Label(new Rect(rect.x + 20f, rect.y + 605f, 900f, 30f),
+                packageError.Length == 0
+                    ? "Edit names, directions, mappings, and faces; then validate the draft."
+                    : packageError);
+            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 643f,
+                180f, 35f), "Validate draft"))
+            {
+                try
+                {
+                    var candidate = packageDraft.BuildCandidate(Guid.NewGuid());
+                    packageError = "Valid fixed design: " + candidate.Ports.Count +
+                        " ports. Close to return to the world.";
+                }
+                catch (ArgumentException exception)
+                { packageError = exception.Message; }
+            }
+            if (GUI.Button(new Rect(rect.x + 740f, rect.y + 643f,
+                180f, 35f), "Close"))
+            {
+                packageDraft = null;
+                packageError = "";
+                player.SetInterfaceOpen(false);
+            }
+        }
+
+        private static GridDirection PortFace(QuarterPoint point)
+        {
+            if (point.X == 0) return GridDirection.West;
+            if (point.X == 4) return GridDirection.East;
+            if (point.Y == 0) return GridDirection.Down;
+            if (point.Y == 4) return GridDirection.Up;
+            if (point.Z == 0) return GridDirection.South;
+            return GridDirection.North;
+        }
+
+        private string EndpointName(JoinMember target)
+        {
+            if (target.Kind == JoinTargetKind.ComponentPin)
+                foreach (var component in packageDraft.Snapshot.Components)
+                    if (component.Id == target.OwnerId)
+                        foreach (var pin in component.PinIds)
+                            if (pin.Value == target.PartId) return pin.Key;
+            return target.Kind == JoinTargetKind.ConnectorNode
+                ? "wire" : "port";
+        }
+
+        private void CyclePortMapping(int index)
+        {
+            var candidates = packageDraft.Snapshot.PortCandidates;
+            if (candidates.Count == 0) return;
+            var choice = packageDraft.Ports[index];
+            var found = -1;
+            for (var i = 0; i < candidates.Count; i++)
+                if (candidates[i].InternalEndpoint.Equals(choice.BitZeroTarget))
+                { found = i; break; }
+            var target = candidates[(found + 1) % candidates.Count];
+            packageDraft.ReplacePort(index, new OneBitPortChoice(choice.Name,
+                choice.Direction, choice.LocalCell, choice.PointQ,
+                target.InternalEndpoint));
+            packageError = "";
+        }
+
+        private void MovePortToNextFace(int index)
+        {
+            var faces = new[] { GridDirection.West, GridDirection.East,
+                GridDirection.North, GridDirection.South, GridDirection.Up,
+                GridDirection.Down };
+            var choice = packageDraft.Ports[index];
+            var current = PortFace(choice.PointQ);
+            var start = Array.IndexOf(faces, current);
+            var size = packageDraft.Snapshot.SizeCells;
+            for (var step = 1; step < faces.Length; step++)
+            {
+                var face = faces[(start + step) % faces.Length];
+                for (var x = 0; x < size.X; x++)
+                    for (var y = 0; y < size.Y; y++)
+                        for (var z = 0; z < size.Z; z++)
+                            for (var a = 1; a <= 3; a += 2)
+                                for (var b = 1; b <= 3; b += 2)
+                                {
+                                    if (face == GridDirection.West && x != 0 ||
+                                        face == GridDirection.East && x != size.X - 1 ||
+                                        face == GridDirection.Down && y != 0 ||
+                                        face == GridDirection.Up && y != size.Y - 1 ||
+                                        face == GridDirection.South && z != 0 ||
+                                        face == GridDirection.North && z != size.Z - 1)
+                                        continue;
+                                    var cell = new GridCell(x, y, z);
+                                    var point = face == GridDirection.West
+                                        ? new QuarterPoint(0, a, b) :
+                                        face == GridDirection.East
+                                        ? new QuarterPoint(4, a, b) :
+                                        face == GridDirection.Down
+                                        ? new QuarterPoint(a, 0, b) :
+                                        face == GridDirection.Up
+                                        ? new QuarterPoint(a, 4, b) :
+                                        face == GridDirection.South
+                                        ? new QuarterPoint(a, b, 0) :
+                                        new QuarterPoint(a, b, 4);
+                                    var taken = false;
+                                    for (var other = 0;
+                                         other < packageDraft.Ports.Count; other++)
+                                        if (other != index &&
+                                            packageDraft.Ports[other].LocalCell.Equals(cell) &&
+                                            packageDraft.Ports[other].PointQ.Equals(point))
+                                            taken = true;
+                                    if (taken) continue;
+                                    packageDraft.ReplacePort(index,
+                                        new OneBitPortChoice(choice.Name,
+                                            choice.Direction, cell, point,
+                                            choice.BitZeroTarget));
+                                    packageError = "";
+                                    return;
+                                }
+            }
+            packageError = "No free position on another exterior face.";
         }
 
         private void DrawSourceConfigure()
