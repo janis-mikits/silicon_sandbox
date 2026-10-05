@@ -12,6 +12,27 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class GraphDrivenCircuitTests
     {
         [Test]
+        public void FeedbackWithKnownZeroSeedConvergesWhileUnseededLoopRemainsUnknown()
+        {
+            var one = new SourceBinding(Guid.NewGuid(), 1,
+                LogicBit.One, true);
+            var zero = new SourceBinding(Guid.NewGuid(), 0,
+                LogicBit.Zero, true);
+            var loop = new AndBinding(Guid.NewGuid(), 0, 1, 0);
+            var seeded = new GraphDrivenOneBitCircuit(new OneBitCircuitPlan(2,
+                new[] { one, zero }, new[] { loop }));
+            Assert.That(seeded.ConvergenceDiagnostic, Is.Null);
+            Assert.That(seeded.Net(0).Value, Is.EqualTo(LogicBit.Zero),
+                "0 AND 1 is 0, so the feedback agrees with its known seed.");
+
+            var unseeded = new GraphDrivenOneBitCircuit(new OneBitCircuitPlan(2,
+                new[] { one }, new[] { loop }));
+            Assert.That(unseeded.ConvergenceDiagnostic, Is.Null);
+            Assert.That(unseeded.Net(0).Value, Is.EqualTo(LogicBit.X),
+                "An undriven input to AND is uncertain; repeated feedback stays X.");
+        }
+
+        [Test]
         public void LongAcyclicChainIsNotMistakenForFeedbackOscillation()
         {
             const int gateCount = 1500;

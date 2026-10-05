@@ -193,6 +193,7 @@ namespace SiliconSandbox.Application
             {
                 Circuit.SetSourceOn(sourceId, nextOn);
                 Circuit.AdvanceToSettled();
+                Scheduler.RefreshCircuitDiagnostic();
             }
             else
             {
