@@ -2,6 +2,14 @@
 
 This log records only new game or material cross-system choices that would normally have required the user's decision. The user authorized choosing the recommended option during the extended first-playable implementation. Routine code choices are omitted; the canonical document linked for each entry governs behavior.
 
+## 5 October 2026 — Stable generated floor and wall style IDs
+
+**Issue:** Version 1 saves exact `floorMaterialId` and `wallStyleId` values, while the accepted default sandstone floor and wooden boundary had no durable IDs. Depending on mutable asset filenames would make existing saves change meaning after an art rename.
+
+**Options:** (1) Store current asset paths; (2) assign stable built-in style IDs and keep their visual assets replaceable.
+
+**Recommendation adopted:** Option 2. New flat worlds use `builtin.smooth_sandstone` and `builtin.wood_sandbox_wall`. The IDs record the generated-world choice, independent of scene mesh or material filenames. Recorded in the [version 1 schema](../docs/first-playable-data-schema.md#world-archive).
+
 ## 5 October 2026 — Stable IDs for the initial connector tools
 
 **Issue:** The accepted version 1 inventory saves durable `itemTypeId` values, but the one-bit wire and world-clock-link tool IDs were not fixed. Changing a UI label must not make an old inventory item unknown.

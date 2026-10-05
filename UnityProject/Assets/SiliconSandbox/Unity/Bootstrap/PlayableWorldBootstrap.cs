@@ -12,6 +12,7 @@ namespace SiliconSandbox.Bootstrap
     {
         private const string SmokeOutputVariable = "SILICON_SANDBOX_SMOKE_OUTPUT";
 
+        public OneBitWorldContext Context { get; private set; }
         public OneBitWorldSession Session { get; private set; }
         public OneBitPlayerInventory Inventory { get; private set; }
         public OneBitWorldView WorldView { get; private set; }
@@ -19,9 +20,10 @@ namespace SiliconSandbox.Bootstrap
 
         private void Start()
         {
-            Session = new OneBitWorldSession(OneBitWorldDesign.Empty(
-                new WorldBounds(32, 32, 16)));
-            Inventory = OneBitPlayerInventory.NewFreeplay();
+            Context = OneBitWorldContext.NewFreeplay("New World",
+                new WorldBounds(32, 32, 16));
+            Session = Context.Session;
+            Inventory = Context.Inventory;
             BuildGeneratedWorld(Session.Design.Bounds);
             var renderedWorld = new GameObject("Authored one-bit world");
             WorldView = renderedWorld.AddComponent<OneBitWorldView>();
