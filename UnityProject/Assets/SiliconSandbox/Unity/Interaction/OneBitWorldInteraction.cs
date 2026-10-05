@@ -30,6 +30,8 @@ namespace SiliconSandbox.Interaction
         private GridCell ghostCell;
         private GridOrientation ghostOrientation;
         private string ghostType;
+        private PlacedOneBitModuleInstance ghostModule;
+        private string ghostModuleName;
         private bool ghostValid;
         private bool ghostCached;
         private float invalidUntil;
@@ -235,14 +237,22 @@ namespace SiliconSandbox.Interaction
                 return;
             }
             var typeId = SelectedComponentType();
-            if (typeId == null || !ghostCached || !ghostValid)
+            var selectedModule = SelectedModuleVersion();
+            if ((typeId == null && selectedModule == null) ||
+                !ghostCached || !ghostValid)
             {
                 InvalidAction();
                 return;
             }
             var cell = ghostCell;
             var orientation = ghostOrientation;
-            TryEdit(() => session.PlaceComponent(typeId, cell, orientation));
+            if (selectedModule != null)
+            {
+                var name = ghostModuleName;
+                TryEdit(() => session.PlaceModule(selectedModule, name,
+                    cell, orientation));
+            }
+            else TryEdit(() => session.PlaceComponent(typeId, cell, orientation));
             ghostCached = false;
         }
 
@@ -282,6 +292,7 @@ namespace SiliconSandbox.Interaction
             catch (ArgumentException) { InvalidAction(); }
             catch (InvalidOperationException) { InvalidAction(); }
             catch (FormatException) { InvalidAction(); }
+            catch (NotSupportedException) { InvalidAction(); }
         }
 
         private void InvalidAction()
@@ -293,26 +304,49 @@ namespace SiliconSandbox.Interaction
         private void UpdateGhost()
         {
             var typeId = SelectedComponentType();
-            if (typeId == null || !hasHit || !PlacementCell(out var cell))
+            var moduleVersion = SelectedModuleVersion();
+            if ((typeId == null && moduleVersion == null) ||
+                !hasHit || !PlacementCell(out var cell))
             {
                 HideGhost();
                 return;
             }
+            var selectedId = moduleVersion == null ? typeId :
+                "module:" + moduleVersion.VersionId.ToString("D");
             var orientation = InitialOrientation(cell);
             if (!ghostCached || !cell.Equals(ghostCell) ||
-                !orientation.Equals(ghostOrientation) || ghostType != typeId)
+                !orientation.Equals(ghostOrientation) || ghostType != selectedId)
             {
                 ghostCell = cell;
                 ghostOrientation = orientation;
-                ghostType = typeId;
+                ghostType = selectedId;
                 ghostCached = true;
+                ghostModule = null;
                 try
                 {
-                    OneBitWorldEdits.PlaceComponent(session.Design, typeId,
-                        cell, orientation);
+                    if (moduleVersion == null)
+                        OneBitWorldEdits.PlaceComponent(session.Design, typeId,
+                            cell, orientation);
+                    else
+                    {
+                        ghostModuleName = NextModuleName(moduleVersion.Name);
+                        var ports = new List<OneBitPortInterface>();
+                        foreach (var port in moduleVersion.Ports)
+                            ports.Add(new OneBitPortInterface(port.Id,
+                                port.Name, port.Direction, port.LocalCell,
+                                port.PointQ));
+                        ghostModule = new PlacedOneBitModuleInstance(
+                            Guid.NewGuid(), Guid.NewGuid(),
+                            moduleVersion.FamilyId, moduleVersion.VersionId,
+                            ghostModuleName, cell, orientation,
+                            moduleVersion.SizeCells, ports);
+                        OneBitWorldEdits.PlaceModule(session.Design,
+                            moduleVersion, ghostModuleName, cell, orientation);
+                    }
                     ghostValid = true;
                 }
                 catch (ArgumentException) { ghostValid = false; }
+                catch (NotSupportedException) { ghostValid = false; }
                 DrawGhost();
             }
             if (ghostRoot != null) ghostRoot.SetActive(true);
@@ -328,9 +362,22 @@ namespace SiliconSandbox.Interaction
             if (ghostRoot != null) Destroy(ghostRoot);
             ghostRoot = new GameObject("Placement preview");
             ghostRenderers.Clear();
+            if (ghostModule != null)
+            {
+                foreach (var cell in ghostModule.OccupiedCells())
+                    AddGhostPrimitive(PrimitiveType.Cube,
+                        new Vector3(cell.X + 0.5f, cell.Y + 0.5f,
+                            cell.Z + 0.5f), Vector3.one * 0.82f);
+                foreach (var port in ghostModule.BuildPortBits())
+                    AddGhostPrimitive(PrimitiveType.Sphere,
+                        PointPosition(port.Cell, port.PointQ),
+                        Vector3.one * 0.18f);
+                return;
+            }
             AddGhostPrimitive(PrimitiveType.Cube,
                 new Vector3(ghostCell.X + 0.5f, ghostCell.Y + 0.5f, ghostCell.Z + 0.5f),
                 Vector3.one * 0.78f);
+            if (SelectedComponentType() == null) return;
             foreach (var pin in BuiltInPinCatalog.Pins(ghostType, 1))
             {
                 var point = ghostOrientation.TransformPoint(new QuarterPoint(
@@ -487,6 +534,15 @@ namespace SiliconSandbox.Interaction
                         return true;
                     }
             }
+            if (hovered != null && hovered.Kind == WorldPartKind.ModuleBody)
+            {
+                var center = hit.collider.bounds.center;
+                var offset = FaceOffset(hit.normal);
+                cell = new GridCell(Mathf.FloorToInt(center.x) + offset.X,
+                    Mathf.FloorToInt(center.y) + offset.Y,
+                    Mathf.FloorToInt(center.z) + offset.Z);
+                return true;
+            }
             var sample = hit.point + hit.normal * 0.02f;
             cell = new GridCell(Mathf.FloorToInt(sample.x),
                 Mathf.FloorToInt(sample.y), Mathf.FloorToInt(sample.z));
@@ -519,6 +575,28 @@ namespace SiliconSandbox.Interaction
             return id == BuiltInPinCatalog.Source ||
                 id == BuiltInPinCatalog.And ||
                 id == BuiltInPinCatalog.SrFlipFlop ? id : null;
+        }
+
+        private OneBitModuleVersion SelectedModuleVersion()
+        {
+            var item = inventory.SelectedItem;
+            if (item == null || item.Kind != SavedInventoryKind.ModuleVersion)
+                return null;
+            return session.ModuleVersions.TryGetValue(item.VersionId,
+                out var version) && version.FamilyId == item.FamilyId
+                ? version : null;
+        }
+
+        private string NextModuleName(string baseName)
+        {
+            var occupied = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var module in session.Design.Modules)
+                occupied.Add(module.InstanceName);
+            for (var index = 1; ; index++)
+            {
+                var name = baseName + " " + index;
+                if (!occupied.Contains(name)) return name;
+            }
         }
 
         private string SelectedCatalogId()
