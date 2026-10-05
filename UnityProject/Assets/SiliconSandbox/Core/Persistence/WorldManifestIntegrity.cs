@@ -30,12 +30,13 @@ namespace SiliconSandbox.Persistence
         public ManifestModuleVersionRecord(Guid familyId, Guid versionId,
             IEnumerable<Guid> childVersionIds)
         {
-            if (familyId == Guid.Empty || versionId == Guid.Empty ||
+            if (!WorldManifestIntegrity.IsVersionFour(familyId) ||
+                !WorldManifestIntegrity.IsVersionFour(versionId) ||
                 childVersionIds == null)
                 throw new ArgumentException("Invalid manifest module identity.");
             var children = new List<Guid>(childVersionIds);
             for (var i = 0; i < children.Count; i++)
-                if (children[i] == Guid.Empty ||
+                if (!WorldManifestIntegrity.IsVersionFour(children[i]) ||
                     i > 0 && children[i - 1].CompareTo(children[i]) >= 0)
                     throw new ArgumentException(
                         "Child versions must be sorted, unique, and nonempty.");
@@ -168,13 +169,19 @@ namespace SiliconSandbox.Persistence
         private static ManifestEntryRecord Entry(string path, byte[] bytes) =>
             new ManifestEntryRecord(path, bytes.LongLength, Sha256Hex(bytes));
 
+        internal static bool IsVersionFour(Guid id)
+        {
+            var text = id.ToString("D");
+            return text[14] == '4' && "89ab".IndexOf(text[19]) >= 0;
+        }
+
         private static bool Matches(ManifestEntryRecord entry, byte[] bytes) =>
             entry.UncompressedBytes == bytes.LongLength &&
             entry.Sha256 == Sha256Hex(bytes);
 
         internal static void ValidateStructure(WorldManifestRecord manifest)
         {
-            if (manifest.WorldId == Guid.Empty)
+            if (!IsVersionFour(manifest.WorldId))
                 throw new InvalidDataException("Empty world identity.");
             var entries = new Dictionary<string, ManifestEntryRecord>(
                 StringComparer.Ordinal);

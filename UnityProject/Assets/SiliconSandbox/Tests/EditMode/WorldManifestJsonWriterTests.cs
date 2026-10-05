@@ -41,6 +41,18 @@ namespace SiliconSandbox.Tests.EditMode
         }
 
         [Test]
+        public void ManifestRejectsLegacyUuidVariantBeforeWriting()
+        {
+            var legacy = Guid.Parse("11111111-1111-1111-8111-111111111111");
+            Assert.Throws<InvalidDataException>(() =>
+                WorldManifestIntegrity.Build(legacy, Array.Empty<byte>(),
+                    Array.Empty<ModuleArchivePayload>()));
+            Assert.Throws<ArgumentException>(() => new ModuleArchivePayload(
+                Guid.NewGuid(), legacy, Array.Empty<Guid>(),
+                Array.Empty<byte>()));
+        }
+
+        [Test]
         public void EmbeddedVersionKeepsExactIdentityAndArchivePath()
         {
             var family = Guid.Parse("22222222-2222-4222-8222-222222222222");

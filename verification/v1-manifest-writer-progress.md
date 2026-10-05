@@ -9,3 +9,5 @@ SILICON_SANDBOX_TEST_ROOT="$PWD/UnityProject/Temp/OfflineVerification/StoreTests
 ```
 
 This is supplemental offline .NET compilation/testing, not Unity Test Runner evidence. Full V1 `world.json` and module JSON encoding, strict decoding, save/reopen, and native Unity verification remain incomplete. No new dependency or out-of-repository game-save path was used.
+
+A follow-up validation test rejects a non-version-4 world or module UUID before a manifest can be written. The offline suite then passed **166 tests, zero failed, zero ignored** with the same command above.
