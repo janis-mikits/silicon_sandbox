@@ -5,8 +5,8 @@ coordinates with new component, pin, connector, node, span, and join IDs. It
 keeps the source world unchanged. It clips routes at the exact inclusive
 selection boundary, separates paths that leave and re-enter, excludes paths
 without an inside component connection, and exposes exact authored pin/node
-references as port candidates. The stage does not yet configure exterior
-ports, place an instance, or save the result. A separate fixed-version factory
+references as port candidates. The extractor itself does not configure ports,
+publish a package, or save the result. A separate fixed-version factory
 now accepts explicit one-bit port names, directions, exterior locations, and
 authored internal endpoint mappings; it assigns stable port/version identities
 and rejects duplicate names, occupied exterior positions, or missing targets
@@ -19,8 +19,13 @@ across the two placements. The derived hierarchical plan maps each exterior
 port to its exact internal authored endpoint, expands internal state under its
 instance path, and joins each placed CLK port to the world-clock signal through
 an explicit visible Net Link stub. This is simulation data, independent of
-rendering or camera visibility. Package publication, inventory/UI controls,
-durable saves, and missing-definition recovery are not implemented yet.
+rendering or camera visibility. Package publication, inventory controls,
+durable saves, and archive-level recovery are not implemented yet.
+When a placed instance's exact version is unavailable, the derived plan now
+keeps the validated interface snapshot and connectors, leaves input ports
+undriven, and drives output/inout ports X. The view marks the module body
+`MISSING`; Inspect identifies that cause. This is the runtime placeholder
+path; the archive loader's exact-copy/hash recovery is still unimplemented.
 The Unity presentation renders module footprints and exact port positions as
 targetable objects. The interaction shell can wire module ports, attach a
 world-clock stub to their CLK port, and inspect a port's settled value.
@@ -41,7 +46,7 @@ Offline repository-local NUnit command executed from the repository root:
 DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet
 ```
 
-Latest result: 120 passed, 0 failed, 0 ignored. The new independent test
+Latest result: 124 passed, 0 failed, 0 ignored. The new independent test
 checks the accepted three rising-edge SR sequence for two placed copies:
 1/X, 1/0, then 0/0, with four separate world sources. The Play Mode source compile
 also succeeded with zero warnings and zero errors using the same offline SDK

@@ -75,6 +75,21 @@ namespace SiliconSandbox.Contracts
         { ConnectorId = connectorId; AnchorNodeId = anchorNodeId; OutputNet = outputNet; }
     }
 
+    public readonly struct MissingModuleOutputBinding
+    {
+        public Guid InstanceObjectId { get; }
+        public Guid PortId { get; }
+        public int OutputNet { get; }
+
+        public MissingModuleOutputBinding(Guid instanceObjectId, Guid portId,
+            int outputNet)
+        {
+            InstanceObjectId = instanceObjectId;
+            PortId = portId;
+            OutputNet = outputNet;
+        }
+    }
+
     public sealed class OneBitCircuitPlan
     {
         public int NetCount { get; }
@@ -82,10 +97,12 @@ namespace SiliconSandbox.Contracts
         public IReadOnlyList<AndBinding> AndGates { get; }
         public IReadOnlyList<SrBinding> SrFlipFlops { get; }
         public WorldClockBinding? WorldClock { get; }
+        public IReadOnlyList<MissingModuleOutputBinding> MissingModuleOutputs { get; }
 
         public OneBitCircuitPlan(int netCount, IEnumerable<SourceBinding> sources,
             IEnumerable<AndBinding> andGates, IEnumerable<SrBinding> srFlipFlops = null,
-            WorldClockBinding? worldClock = null)
+            WorldClockBinding? worldClock = null,
+            IEnumerable<MissingModuleOutputBinding> missingModuleOutputs = null)
         {
             if (netCount < 0 || sources == null || andGates == null)
                 throw new ArgumentException("Invalid circuit plan.");
@@ -93,6 +110,9 @@ namespace SiliconSandbox.Contracts
             var gateList = new List<AndBinding>(andGates);
             var srList = srFlipFlops == null ? new List<SrBinding>() :
                 new List<SrBinding>(srFlipFlops);
+            var missingList = missingModuleOutputs == null
+                ? new List<MissingModuleOutputBinding>()
+                : new List<MissingModuleOutputBinding>(missingModuleOutputs);
             var ids = new HashSet<RuntimeObjectKey>();
             var outputDriverIds = new HashSet<RuntimeDriverKey>();
             foreach (var source in sourceList)
@@ -134,11 +154,22 @@ namespace SiliconSandbox.Contracts
                     throw new ArgumentException("Invalid world-clock driver identity.");
                 CheckNet(clock.OutputNet);
             }
+            foreach (var missing in missingList)
+            {
+                if (missing.InstanceObjectId == Guid.Empty ||
+                    missing.PortId == Guid.Empty ||
+                    !outputDriverIds.Add(new RuntimeDriverKey(
+                        RuntimeObjectKey.World(missing.InstanceObjectId),
+                        missing.PortId)))
+                    throw new ArgumentException("Invalid missing-module output identity.");
+                CheckNet(missing.OutputNet);
+            }
             NetCount = netCount;
             Sources = sourceList.AsReadOnly();
             AndGates = gateList.AsReadOnly();
             SrFlipFlops = srList.AsReadOnly();
             WorldClock = worldClock;
+            MissingModuleOutputs = missingList.AsReadOnly();
 
             void CheckNet(int index)
             {

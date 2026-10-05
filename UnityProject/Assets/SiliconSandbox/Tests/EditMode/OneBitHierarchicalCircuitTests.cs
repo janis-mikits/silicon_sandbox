@@ -12,6 +12,36 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class OneBitHierarchicalCircuitTests
     {
         [Test]
+        public void MissingExactVersionRetainsTwoPlacementsAndDrivesOnlyOutputsX()
+        {
+            var version = SrVersion();
+            var world = OneBitWorldDesign.Empty(new WorldBounds(12, 12, 5));
+            world = OneBitWorldEdits.PlaceModule(world, version, "A",
+                new GridCell(3, 1, 3), GridOrientation.Default);
+            world = OneBitWorldEdits.PlaceModule(world, version, "B",
+                new GridCell(8, 1, 3), GridOrientation.Default);
+            var session = new OneBitWorldSession(world, "10");
+            var a = world.Modules[0];
+            var b = world.Modules[1];
+            var s = version.Ports[0].Id;
+            var q = version.Ports[3].Id;
+
+            Assert.That(session.HasModuleVersion(version.VersionId), Is.False);
+            Assert.That(session.Design.Modules.Count, Is.EqualTo(2));
+            Assert.That(a.InstanceId, Is.Not.EqualTo(b.InstanceId));
+            Assert.That(session.Built.Plan.MissingModuleOutputs.Count,
+                Is.EqualTo(2));
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(
+                ModulePort(a, s))).Value, Is.EqualTo(LogicBit.Z));
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(
+                ModulePort(a, q))).Value, Is.EqualTo(LogicBit.X));
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(
+                ModulePort(b, q))).Value, Is.EqualTo(LogicBit.X));
+            Assert.That(session.Inspector.InspectModulePort(a.Id, q).Explanation,
+                Does.Contain("missing"));
+        }
+
+        [Test]
         public void TwoFixedSrInstancesFollowIndependentThreeEdgeExpectedSequence()
         {
             var version = SrVersion();

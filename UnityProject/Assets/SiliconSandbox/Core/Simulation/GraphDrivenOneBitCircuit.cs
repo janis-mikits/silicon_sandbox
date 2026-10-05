@@ -8,7 +8,7 @@ namespace SiliconSandbox.Simulation
     // slots; rendering and Unity frame rate never drive electrical propagation.
     public sealed class GraphDrivenOneBitCircuit
     {
-        private enum WorkKind { Source, And, StorageOutput, WorldClock }
+        private enum WorkKind { Source, And, StorageOutput, WorldClock, MissingModule }
 
         private OneBitCircuitPlan plan;
         private OneBitNet[] nets;
@@ -79,6 +79,8 @@ namespace SiliconSandbox.Simulation
             for (var i = 0; i < plan.SrFlipFlops.Count; i++)
                 pending.Enqueue((WorkKind.StorageOutput, i));
             if (plan.WorldClock.HasValue) pending.Enqueue((WorkKind.WorldClock, 0));
+            for (var i = 0; i < plan.MissingModuleOutputs.Count; i++)
+                pending.Enqueue((WorkKind.MissingModule, i));
             AdvanceToSettled();
         }
 
@@ -172,7 +174,7 @@ namespace SiliconSandbox.Simulation
                 long evaluations = 0;
                 var limit = (long)maximumDeltaPasses *
                     (plan.Sources.Count + plan.AndGates.Count + plan.SrFlipFlops.Count +
-                     plan.NetCount + 1);
+                     plan.MissingModuleOutputs.Count + plan.NetCount + 1);
                 while (pending.Count > 0)
                 {
                     if (++evaluations > limit)
@@ -201,6 +203,12 @@ namespace SiliconSandbox.Simulation
                             Drive(clock.OutputNet, new RuntimeDriverKey(
                                 RuntimeObjectKey.World(clock.ConnectorId), Guid.Empty),
                                 worldClockLevel);
+                            break;
+                        case WorkKind.MissingModule:
+                            var missing = plan.MissingModuleOutputs[work.index];
+                            Drive(missing.OutputNet, new RuntimeDriverKey(
+                                RuntimeObjectKey.World(missing.InstanceObjectId),
+                                missing.PortId), LogicBit.X);
                             break;
                     }
                 }

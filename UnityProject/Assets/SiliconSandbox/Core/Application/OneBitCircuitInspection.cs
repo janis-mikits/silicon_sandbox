@@ -82,6 +82,10 @@ namespace SiliconSandbox.Application
                         circuit.Storage(storage.RuntimeKey).QBar,
                         storage.RuntimeKey));
             }
+            foreach (var missing in built.Plan.MissingModuleOutputs)
+                if (missing.OutputNet == netIndex)
+                    drivers.Add(new InspectedDriver(JoinMember.ModulePortBit(
+                        missing.InstanceObjectId, missing.PortId, 0), LogicBit.X));
             if (built.Plan.WorldClock.HasValue &&
                 built.Plan.WorldClock.Value.OutputNet == netIndex)
             {
@@ -103,6 +107,9 @@ namespace SiliconSandbox.Application
 
         private string Explain(int netIndex, ResolvedBit resolved)
         {
+            foreach (var missing in built.Plan.MissingModuleOutputs)
+                if (missing.OutputNet == netIndex)
+                    return "Exact module definition is missing; its output drives X.";
             if (resolved.Cause == ResolutionCause.Undriven) return "No active driver.";
             if (resolved.Cause == ResolutionCause.ConflictingDrivers)
                 return "Conflicting active drivers.";

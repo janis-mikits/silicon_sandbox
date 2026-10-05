@@ -111,7 +111,9 @@ namespace SiliconSandbox.Presentation
                     cell.Y + 0.5f, cell.Z + 0.5f);
                 body.transform.localScale = Vector3.one * 0.82f;
                 body.GetComponent<Renderer>().material.color =
-                    new Color(0.34f, 0.58f, 0.72f);
+                    session.HasModuleVersion(module.VersionId)
+                        ? new Color(0.34f, 0.58f, 0.72f)
+                        : new Color(0.82f, 0.24f, 0.24f);
                 body.AddComponent<WorldSelectablePart>().Initialize(
                     WorldPartKind.ModuleBody, module.Id, Guid.Empty);
             }
@@ -122,7 +124,8 @@ namespace SiliconSandbox.Presentation
                 label.transform.position = new Vector3(cells[0].X + 0.5f,
                     cells[0].Y + 1.05f, cells[0].Z + 0.5f);
                 var mesh = label.AddComponent<TextMesh>();
-                mesh.text = module.InstanceName;
+                mesh.text = session.HasModuleVersion(module.VersionId)
+                    ? module.InstanceName : module.InstanceName + " MISSING";
                 mesh.anchor = TextAnchor.MiddleCenter;
                 mesh.characterSize = 0.22f;
                 mesh.fontSize = 48;

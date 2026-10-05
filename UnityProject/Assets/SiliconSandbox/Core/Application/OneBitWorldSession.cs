@@ -18,6 +18,7 @@ namespace SiliconSandbox.Application
         public OneBitCircuitInspection Inspector { get; private set; }
         public WorldSimulationScheduler Scheduler { get; }
         public ulong Revision { get; private set; }
+        public bool HasModuleVersion(Guid versionId) => versions.ContainsKey(versionId);
 
         public OneBitWorldSession(OneBitWorldDesign design, string frequencyHz = "10",
             IReadOnlyDictionary<Guid, OneBitModuleVersion> moduleVersions = null)

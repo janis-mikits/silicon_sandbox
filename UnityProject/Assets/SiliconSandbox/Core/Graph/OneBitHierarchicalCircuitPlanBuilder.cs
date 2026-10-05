@@ -21,9 +21,10 @@ namespace SiliconSandbox.Graph
             var moduleBuilt = new Dictionary<Guid, BuiltOneBitCircuitPlan>();
             foreach (var instance in world.Modules)
             {
-                if (!versions.TryGetValue(instance.VersionId, out var version) ||
-                    version.FamilyId != instance.FamilyId)
-                    throw new ArgumentException("Exact placed module version is unavailable.");
+                if (!versions.TryGetValue(instance.VersionId, out var version))
+                    continue; // Valid interface snapshot becomes an X-driving placeholder.
+                if (version.FamilyId != instance.FamilyId)
+                    throw new ArgumentException("Exact version family disagrees with placement.");
                 CheckInterface(instance, version);
                 if (version.Topology.ModulePorts.Count != 0)
                     throw new NotSupportedException(
@@ -40,6 +41,7 @@ namespace SiliconSandbox.Graph
             var total = worldBuilt.Plan.NetCount;
             foreach (var instance in world.Modules)
             {
+                if (!versions.ContainsKey(instance.VersionId)) continue;
                 offsetByInstance.Add(instance.InstanceId, total);
                 total = checked(total + moduleBuilt[instance.VersionId].Plan.NetCount);
             }
@@ -49,6 +51,7 @@ namespace SiliconSandbox.Graph
                 chosenClock.Value.OutputNet : -1;
             foreach (var instance in world.Modules)
             {
+                if (!versions.ContainsKey(instance.VersionId)) continue;
                 var version = versions[instance.VersionId];
                 var built = moduleBuilt[instance.VersionId];
                 var offset = offsetByInstance[instance.InstanceId];
@@ -77,17 +80,29 @@ namespace SiliconSandbox.Graph
             var sources = new List<SourceBinding>();
             var gates = new List<AndBinding>();
             var storage = new List<SrBinding>();
+            var missingOutputs = new List<MissingModuleOutputBinding>();
             AddBindings(worldBuilt.Plan, 0, null);
             foreach (var instance in world.Modules)
-                AddBindings(moduleBuilt[instance.VersionId].Plan,
-                    offsetByInstance[instance.InstanceId], instance);
+            {
+                if (versions.ContainsKey(instance.VersionId))
+                    AddBindings(moduleBuilt[instance.VersionId].Plan,
+                        offsetByInstance[instance.InstanceId], instance);
+                else
+                    foreach (var port in instance.InterfacePorts)
+                        if (port.Direction == OneBitPortDirection.Output ||
+                            port.Direction == OneBitPortDirection.Inout)
+                            missingOutputs.Add(new MissingModuleOutputBinding(
+                                instance.Id, port.Id, Net(worldBuilt.NetIndex(
+                                    JoinMember.ModulePortBit(instance.Id,
+                                        port.Id, 0)))));
+            }
             WorldClockBinding? clockBinding = null;
             if (chosenClock.HasValue)
                 clockBinding = new WorldClockBinding(chosenClock.Value.ConnectorId,
                     chosenClock.Value.AnchorNodeId, Net(chosenClockRaw));
 
             var plan = new OneBitCircuitPlan(dense.Count, sources, gates, storage,
-                clockBinding);
+                clockBinding, missingOutputs);
             var worldIndexes = new Dictionary<JoinMember, int>();
             foreach (var net in worldBuilt.Graph.Nets)
                 foreach (var member in net.Members)
@@ -95,6 +110,7 @@ namespace SiliconSandbox.Graph
             var internalIndexes = new Dictionary<(Guid, JoinMember), int>();
             foreach (var instance in world.Modules)
             {
+                if (!versions.ContainsKey(instance.VersionId)) continue;
                 var built = moduleBuilt[instance.VersionId];
                 var offset = offsetByInstance[instance.InstanceId];
                 foreach (var net in built.Graph.Nets)
