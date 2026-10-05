@@ -50,6 +50,14 @@ namespace SiliconSandbox.Application
             Publish(OneBitWorldEdits.PlaceConnector(Design, connector, joins));
         }
 
+        public void ConnectPins(JoinMember first, JoinMember second)
+        {
+            SafePause();
+            var proposal = OneBitPinRoutePlanner.Plan(Design, first, second);
+            Publish(OneBitWorldEdits.PlaceConnector(Design,
+                proposal.Route, proposal.Joins));
+        }
+
         public void AddJoin(ElectricalJoin join, string chosenTag = null)
         {
             SafePause();

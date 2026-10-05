@@ -24,7 +24,7 @@ namespace SiliconSandbox.Bootstrap
                 fixture.Circuit != null && fixture.Y.Value == LogicBit.Zero &&
                 GameObject.Find(AndCircuitFixture.GateObjectName) != null;
             File.WriteAllText(output, valid ? "PASS\n" : "FAIL\n");
-            Application.Quit(valid ? 0 : 1);
+            UnityEngine.Application.Quit(valid ? 0 : 1);
         }
     }
 }

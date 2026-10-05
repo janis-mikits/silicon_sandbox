@@ -42,7 +42,8 @@ namespace SiliconSandbox.Tests.EditMode
             var result = OneBitTopologyEdits.BreakSpan(original, originalRoute.Id, brokenSpan.Id);
             Assert.That(result.RetiredConnectorId, Is.EqualTo(originalRoute.Id));
             Assert.That(result.ReplacementConnectorIds.Count, Is.EqualTo(2));
-            Assert.That(result.ReplacementConnectorIds, Does.Not.Contain(originalRoute.Id));
+            Assert.That(result.ReplacementConnectorIds[0], Is.Not.EqualTo(originalRoute.Id));
+            Assert.That(result.ReplacementConnectorIds[1], Is.Not.EqualTo(originalRoute.Id));
             Assert.That(result.Design.Connectors.Count, Is.EqualTo(3));
             Assert.That(result.Design.Connectors[0].Nodes[0].Id, Is.EqualTo(west.Id));
             Assert.That(result.Design.Connectors[0].Spans[0].Id, Is.EqualTo(firstSpan.Id));
