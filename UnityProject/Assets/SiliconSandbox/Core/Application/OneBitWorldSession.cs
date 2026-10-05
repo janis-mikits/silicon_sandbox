@@ -66,6 +66,15 @@ namespace SiliconSandbox.Application
             Publish(OneBitWorldEdits.AttachWorldClockPin(Design, srObjectId));
         }
 
+        public void ConnectPinToNode(JoinMember pin, JoinMember targetNode)
+        {
+            SafePause();
+            var proposal = OneBitPinRoutePlanner.PlanToConnectorNode(
+                Design, pin, targetNode);
+            Publish(OneBitWorldEdits.PlaceConnector(Design,
+                proposal.Route, proposal.Joins));
+        }
+
         public void AddJoin(ElectricalJoin join, string chosenTag = null)
         {
             SafePause();

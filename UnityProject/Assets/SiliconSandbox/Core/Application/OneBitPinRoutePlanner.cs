@@ -67,13 +67,64 @@ namespace SiliconSandbox.Application
                         if (node.Channel == channel) occupied.Add(node.Cell);
                 var path = FindPath(design.Bounds, start, finish, occupied);
                 if (path == null) continue;
-                var proposal = Build(path, channel, first, firstPin, second, secondPin);
+                var proposal = Build(path, channel, first, firstPin, second,
+                    FacePoint(Opposite(Face(secondPin.PointQ)), secondPin.PointQ));
                 // Validate the complete route/joins against the current design
                 // before offering it to the caller for one atomic publication.
                 OneBitWorldEdits.PlaceConnector(design, proposal.Route, proposal.Joins);
                 return proposal;
             }
             throw new ArgumentException("No free one-bit connector route or channel.");
+        }
+
+        public static OneBitPinRouteProposal PlanToConnectorNode(
+            OneBitWorldDesign design, JoinMember pin, JoinMember targetNode)
+        {
+            if (design == null) throw new ArgumentNullException(nameof(design));
+            if (pin.Kind != JoinTargetKind.ComponentPin ||
+                targetNode.Kind != JoinTargetKind.ConnectorNode)
+                throw new ArgumentException("Choose a free component pin and a connector node.");
+            var sourcePin = FindPin(design, pin);
+            RouteNode target = null;
+            foreach (var route in design.Topology.Connectors)
+                if (route.Id == targetNode.OwnerId)
+                    foreach (var node in route.Nodes)
+                        if (node.Id == targetNode.PartId) { target = node; break; }
+            if (target == null) throw new ArgumentException("Unknown connector node.");
+            foreach (var component in design.Components)
+                if (component.AnchorCell.Equals(target.Cell))
+                    throw new ArgumentException("Target a connector node outside a component body.");
+            foreach (var join in design.Topology.Joins)
+                foreach (var member in join.Members)
+                    if (member.Equals(pin))
+                        throw new ArgumentException("The selected pin already has a connector.");
+
+            var start = Move(sourcePin.Cell, Face(sourcePin.PointQ));
+            var blockedComponents = new HashSet<GridCell>();
+            foreach (var component in design.Components)
+                blockedComponents.Add(component.AnchorCell);
+            for (var channel = 0; channel < 4; channel++)
+            {
+                var occupied = new HashSet<GridCell>(blockedComponents);
+                foreach (var route in design.Topology.Connectors)
+                    foreach (var node in route.Nodes)
+                        if (node.Channel == channel && !node.Cell.Equals(target.Cell))
+                            occupied.Add(node.Cell);
+                var path = FindPath(design.Bounds, start, target.Cell, occupied);
+                if (path == null) continue;
+                var proposal = Build(path, channel, pin, sourcePin,
+                    targetNode, target.PointQ);
+                try
+                {
+                    OneBitWorldEdits.PlaceConnector(design, proposal.Route, proposal.Joins);
+                    return proposal;
+                }
+                catch (ArgumentException)
+                {
+                    // Another path may fit a different physical channel.
+                }
+            }
+            throw new ArgumentException("No valid route to the targeted connector node.");
         }
 
         private static OneBitPinRouteProposal DirectFaceBridge(
@@ -120,7 +171,7 @@ namespace SiliconSandbox.Application
 
         private static OneBitPinRouteProposal Build(IReadOnlyList<GridCell> path,
             int channel, JoinMember first, AuthoredPin firstPin,
-            JoinMember second, AuthoredPin secondPin)
+            JoinMember second, QuarterPoint finalPoint)
         {
             var connectorId = Guid.NewGuid();
             var nodes = new List<RouteNode>();
@@ -135,7 +186,7 @@ namespace SiliconSandbox.Application
                     ? FacePoint(Opposite(Face(firstPin.PointQ)), firstPin.PointQ)
                     : FacePoint(Direction(cell, path[i - 1]), null);
                 var exit = i == path.Count - 1
-                    ? FacePoint(Opposite(Face(secondPin.PointQ)), secondPin.PointQ)
+                    ? finalPoint
                     : FacePoint(Direction(cell, path[i + 1]), null);
                 var entryNode = new RouteNode(Guid.NewGuid(), cell, channel, entry);
                 nodes.Add(entryNode);

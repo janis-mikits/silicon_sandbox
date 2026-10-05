@@ -161,21 +161,33 @@ namespace SiliconSandbox.Interaction
             }
             if (selectedSlot == 1)
             {
-                if (hovered == null || hovered.Kind != WorldPartKind.ComponentPin)
-                {
-                    InvalidAction();
-                    return;
-                }
-                var pin = JoinMember.ComponentPin(hovered.OwnerId, hovered.PartId);
                 if (!wireStart.HasValue)
                 {
+                    if (hovered == null || hovered.Kind != WorldPartKind.ComponentPin)
+                    {
+                        InvalidAction();
+                        return;
+                    }
+                    var pin = JoinMember.ComponentPin(hovered.OwnerId, hovered.PartId);
                     if (PinOccupied(pin)) { InvalidAction(); return; }
                     wireStart = pin;
                 }
                 else
                 {
                     var start = wireStart.Value;
-                    TryEdit(() => session.ConnectPins(start, pin));
+                    if (hovered == null) InvalidAction();
+                    else if (hovered.Kind == WorldPartKind.ComponentPin)
+                    {
+                        var pin = JoinMember.ComponentPin(hovered.OwnerId, hovered.PartId);
+                        TryEdit(() => session.ConnectPins(start, pin));
+                    }
+                    else if (hovered.Kind == WorldPartKind.ConnectorNode)
+                    {
+                        var target = JoinMember.ConnectorNode(
+                            hovered.OwnerId, hovered.PartId);
+                        TryEdit(() => session.ConnectPinToNode(start, target));
+                    }
+                    else InvalidAction();
                     wireStart = null;
                 }
                 return;
@@ -435,7 +447,7 @@ namespace SiliconSandbox.Interaction
                     (session.Scheduler.IsPaused ? "  PAUSED" : ""));
                 if (wireStart.HasValue)
                     GUI.Label(new Rect(12f, 62f, 400f, 28f),
-                        "Wire start selected. Aim at a second free pin.");
+                        "Wire start selected. Aim at a free pin or connector node.");
                 QuickLook();
             }
             if (inventoryOpen) DrawInventory();

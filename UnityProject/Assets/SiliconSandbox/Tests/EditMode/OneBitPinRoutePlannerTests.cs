@@ -118,6 +118,37 @@ namespace SiliconSandbox.Tests.EditMode
         }
 
         [Test]
+        public void TargetedExistingNodeMakesJunctionOnlyAfterExplicitEdit()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(
+                new WorldBounds(8, 8, 4)));
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(2, 1, 2), GridOrientation.Default);
+            var source = session.Design.Components[0];
+            var center = new RouteNode(Guid.NewGuid(), new GridCell(4, 1, 2),
+                0, new QuarterPoint(2, 2, 2));
+            var existing = new ConnectorRoute(Guid.NewGuid(), "wire", 1,
+                new[] { center }, Array.Empty<RouteSpan>());
+            session.PlaceConnector(existing, Array.Empty<ElectricalJoin>());
+            var output = JoinMember.ComponentPin(source.Id, source.PinIds["OUT"]);
+            var target = JoinMember.ConnectorNode(existing.Id, center.Id);
+            Assert.That(session.Built.Graph.Connected(output, target), Is.False,
+                "A visible nearby route does not create an implicit join.");
+            var before = session.Revision;
+
+            session.ConnectPinToNode(output, target);
+            Assert.That(session.Revision, Is.EqualTo(before + 1));
+            Assert.That(session.Design.Topology.Connectors.Count, Is.EqualTo(2));
+            Assert.That(session.Design.Topology.Joins.Count, Is.EqualTo(2));
+            Assert.That(session.Built.Graph.Connected(output, target), Is.True);
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(target)).Value,
+                Is.EqualTo(LogicBit.Zero));
+            var branch = session.Design.Topology.Connectors[1];
+            Assert.That(branch.Nodes[branch.Nodes.Count - 1].PointQ,
+                Is.EqualTo(new QuarterPoint(2, 2, 2)));
+        }
+
+        [Test]
         public void AllFourChannelsBlockedRejectsWithoutPublishing()
         {
             var world = OneBitWorldDesign.Empty(new WorldBounds(3, 1, 2));

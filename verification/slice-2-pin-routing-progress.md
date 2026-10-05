@@ -17,8 +17,12 @@ connector node hidden inside a component cell without its pin join. The route
 planner now also builds an explicit short face bridge for aligned adjacent
 pins; mere physical contact still leaves them disconnected. A route node may
 occupy a component cell only at an exact attached pin face, and no span may
-cross that component's interior. Branching to an existing connector and the
-full freeform player interface remain slice 2 work.
+cross that component's interior. A later extension routes from a free pin
+to a specifically targeted existing connector node and publishes an explicit
+join; its NUnit case expects separation first, then connectivity and 0 after
+the edit. Targeting a connector span between nodes, overlapping-part cycling,
+the full freeform player interface, and final junction/crossing visuals remain
+slice 2 work.
 
 Executed with the approved offline .NET SDK, no downloads, and temporary CLI
 home, package cache, and projects under `UnityProject/Temp/OfflineVerification`:
@@ -26,13 +30,16 @@ home, package cache, and projects under `UnityProject/Temp/OfflineVerification`:
 ```sh
 DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/CoreCompile/CoreCompile.csproj --no-restore -v quiet
 DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet
+DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet build UnityProject/Temp/OfflineVerification/PlayTestsCompile/PlayTestsCompile.csproj --no-restore -v quiet
 ```
 
-Both exited 0. The core harness included `PASS: two-pin route with exact
+All exited 0. The core harness included `PASS: two-pin route with exact
 quadrant shift and explicit joins`. The offline NUnit harness executed 102
 pure Edit Mode cases with 0 failures at that stage; after adding adjacent
 face-bridge and invalid face-node cases, the same offline runner executed
-104 cases with 0 failures. It excludes the Unity Editor scene
+104 cases with 0 failures. The targeted-node extension raised that count to
+107 with 0 failures, and the offline Play Mode source compile exited 0 with
+0 warnings or errors. It excludes the Unity Editor scene
 test. It compiled existing Unity presentation code against the installed
 Editor reference assemblies and exposed an older NUnit collection assertion
 that did not compile; the assertion now checks both replacement IDs directly.
