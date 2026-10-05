@@ -13,6 +13,40 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class FirstPlayableBenchmarkFactoryTests
     {
         [Test]
+        public void FrozenDenseDiagnosticHasExactHashAndFortyByTwentyFiveGateGrid()
+        {
+            const string expectedSha256 =
+                "9dfc121962af93d0151c09203b82bb2dc2d4275b72145aeba2d505f7dbef9242";
+            var path = Path.Combine(UnityEngine.Application.streamingAssetsPath,
+                "Benchmarks/first-playable-dense-diagnostic.ssworld");
+            var bytes = File.ReadAllBytes(path);
+            Assert.That(WorldManifestIntegrity.Sha256Hex(bytes),
+                Is.EqualTo(expectedSha256));
+            using (var stream = new MemoryStream(bytes))
+            {
+                var loaded = WorldV1ArchiveCodec.Read(stream);
+                var world = loaded.Snapshot.Design;
+                Assert.That(world.Components.Count, Is.EqualTo(1000));
+                Assert.That(world.Modules, Is.Empty);
+                Assert.That(world.Topology.Connectors, Is.Empty);
+                Assert.That(loaded.Snapshot.ModuleVersions, Is.Empty);
+                var occupied = new HashSet<GridCell>();
+                foreach (var gate in world.Components)
+                {
+                    Assert.That(gate.TypeId, Is.EqualTo(BuiltInPinCatalog.And));
+                    Assert.That(gate.AnchorCell.X, Is.InRange(2, 41));
+                    Assert.That(gate.AnchorCell.Z, Is.InRange(2, 26));
+                    Assert.That(gate.AnchorCell.Y, Is.EqualTo(1));
+                    Assert.That(occupied.Add(gate.AnchorCell), Is.True);
+                }
+                for (var x = 2; x <= 41; x++)
+                    for (var z = 2; z <= 26; z++)
+                        Assert.That(occupied.Contains(new GridCell(x, 1, z)),
+                            Is.True);
+            }
+        }
+
+        [Test]
         public void FrozenSavedReferenceHasExpectedBytesAndDistribution()
         {
             const string expectedSha256 =

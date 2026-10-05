@@ -31,6 +31,10 @@ def main() -> None:
             "ccbfc944c7ef245141d13a6b1183c0cb7785f34088694ea114414e5454e26967"
             not in report):
         raise SystemExit("Benchmark reference hash is missing or changed.")
+    if ("DENSE DIAGNOSTIC SHA-256="
+            "9dfc121962af93d0151c09203b82bb2dc2d4275b72145aeba2d505f7dbef9242"
+            not in report):
+        raise SystemExit("Dense diagnostic hash is missing or changed.")
     expected = {"idle/stationary", "active/stationary",
                 "idle/flying", "active/flying"}
     seen = set()
@@ -51,7 +55,8 @@ def main() -> None:
             raise SystemExit(f"Performance investigation required for {name}: {line}")
     if seen != expected:
         raise SystemExit(f"Missing benchmark cases: {expected - seen}")
-    expected_shapes = {"sparse-standalone", "repeated-modules"}
+    expected_shapes = {"sparse-standalone", "repeated-modules",
+                       "dense-opaque"}
     seen_shapes = set()
     for line in report.splitlines():
         if not line.startswith("SHAPE="):

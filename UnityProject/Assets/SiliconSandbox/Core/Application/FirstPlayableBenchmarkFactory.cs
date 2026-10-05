@@ -38,6 +38,27 @@ namespace SiliconSandbox.Application
         public static FirstPlayableBenchmarkFixture CreateSavedReference() =>
             Create(Guid.NewGuid);
 
+        // Supplementary shape fixture. It never replaces the frozen mixed
+        // 1000-gate acceptance world or its camera route.
+        public static OneBitWorldDesign CreateDenseDiagnostic()
+        {
+            var id = 0UL;
+            Func<Guid> nextId = () => BenchmarkId(++id);
+            var components = new List<PlacedOneBitComponent>();
+            var pins = new List<AuthoredPin>();
+            for (var i = 0; i < 1000; i++)
+            {
+                var gate = Gate(new GridCell(2 + i % 40, 1,
+                    2 + i / 40), nextId);
+                components.Add(gate);
+                pins.AddRange(gate.BuildPins());
+            }
+            return new OneBitWorldDesign(new WorldBounds(128, 80, 6),
+                components, new OneBitAuthoredTopology(pins,
+                    Array.Empty<ConnectorRoute>(),
+                    Array.Empty<ElectricalJoin>()));
+        }
+
         private static FirstPlayableBenchmarkFixture Create(Func<Guid> nextId)
         {
             var components = new List<PlacedOneBitComponent>();

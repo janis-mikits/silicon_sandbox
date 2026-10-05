@@ -32,6 +32,7 @@ namespace SiliconSandbox.Bootstrap
         private Camera view;
         private double fractionalPicoseconds;
         private long simulationTicks;
+        private bool diagnosticFailed;
         private readonly StringBuilder report = new StringBuilder();
 
         public void Initialize(PlayableWorldBootstrap owner, string output)
@@ -167,7 +168,53 @@ namespace SiliconSandbox.Bootstrap
                 new Vector3(100f, 0.3f, 31f), Vector3.right, 5d, 20d,
                 "SHAPE");
             yield return RunOperations();
+            yield return RunDenseDiagnostic();
+            if (diagnosticFailed) yield break;
             Finish("REFERENCE MEASUREMENT COMPLETE", 0);
+        }
+
+        private IEnumerator RunDenseDiagnostic()
+        {
+            const string diagnosticName = "first-playable-dense-diagnostic";
+            WorldSaveSnapshot snapshot;
+            try
+            {
+                var directory = Path.Combine(UnityEngine.Application.streamingAssetsPath,
+                    "Benchmarks");
+                var archive = File.ReadAllBytes(Path.Combine(directory,
+                    diagnosticName + ".ssworld"));
+                var expectedHash = File.ReadAllText(Path.Combine(directory,
+                    diagnosticName + ".sha256")).Trim();
+                if (!string.Equals(WorldManifestIntegrity.Sha256Hex(archive),
+                    expectedHash, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Dense diagnostic SHA-256 mismatch.");
+                using (var stream = new MemoryStream(archive))
+                    snapshot = WorldV1ArchiveCodec.Read(stream).Snapshot;
+                if (snapshot.Design.Components.Count != 1000 ||
+                    snapshot.Design.Modules.Count != 0 ||
+                    snapshot.Design.Topology.Connectors.Count != 0)
+                    throw new InvalidDataException(
+                        "Dense diagnostic is not the pinned 1000-AND layout.");
+                report.AppendLine("DENSE DIAGNOSTIC SHA-256=" + expectedHash);
+            }
+            catch (Exception error)
+            {
+                diagnosticFailed = true;
+                Finish("UNVERIFIED: dense diagnostic failed validation: " +
+                    error.Message, 1);
+                yield break;
+            }
+            bootstrap.OpenWorld(snapshot);
+            session = bootstrap.Session;
+            yield return null;
+            report.AppendLine("Dense diagnostic: 40x25 adjacent opaque AND" +
+                " cells, 1000 gate operations, no modules or connectors;" +
+                " separate saved shape fixture, not the acceptance reference.");
+            report.AppendLine("Dense renderer objects=" +
+                FindObjectsByType<Renderer>(FindObjectsSortMode.None).Length);
+            yield return RunCase("dense-opaque", false, false,
+                new Vector3(20f, 0.3f, 34f), Vector3.back, 5d, 20d,
+                "SHAPE");
         }
 
         private static void ValidateReference(WorldSaveSnapshot snapshot)

@@ -79,3 +79,28 @@ Result: **192 Edit Mode passed, 17 Play Mode passed, macOS build, player startup
 | Repeated module bodies | 1,356.005 | 0.861 | 323 | 0.737 / 0.451 |
 
 The four primary cases also passed: idle/stationary 241.685 FPS, active/stationary 205.986, idle/flying 759.712, active/flying 684.395; p99 was 4.727–6.913 ms and both active runs processed all 1,200 expected edges. All eight boundary edits took 20–47 ms, save 175 ms, and load through the next frame 302 ms. Largest reserved-memory reading was 188 MiB. The module view has fewer visible renderers, so its higher FPS is a scene-shape observation, **not** a claim that module presentation is intrinsically faster per object. A dedicated densely packed opaque-block scene and a manual visual comparison have not been measured. Windows and CI remain unrun.
+
+## Dense opaque diagnostic and full Mac rerun, 5 October 2026
+
+A separate saved V1 diagnostic, `UnityProject/Assets/StreamingAssets/Benchmarks/first-playable-dense-diagnostic.ssworld`, freezes 1,000 one-bit AND bodies in a contiguous 40 × 25-cell grid. It has no modules or connectors; it isolates opaque body density, not electrical switching or the mixed-scene milestone. Literal SHA-256 `9dfc121962af93d0151c09203b82bb2dc2d4275b72145aeba2d505f7dbef9242` and every expected cell are asserted in Edit Mode. The original mixed reference and hash remain unchanged. The diagnostic uses the same Mac, 1920 × 1080 Standard preset, five-second warm-up, 20-second measurement, and camera `(20,0.3,34)` facing south. Bodies retain small visual gaps, so no claim is made about fully occluded interior faces.
+
+Commands and observed result:
+
+```sh
+scripts/verify-unity.sh --editor '/Applications/Unity/Hub/Editor/6000.3.24f1/Unity.app/Contents/MacOS/Unity' --target StandaloneOSX
+scripts/benchmark-mac.sh
+```
+
+The Unity gate passed **193 Edit Mode tests, 17 Play Mode tests, Mac build, player startup, V1 save/reopen, and normal-exit autosave**. The benchmark printed `Strict Mac numerical frame, shape, clock, edit, save and load gates passed.` The ignored raw report is `UnityProject/Logs/Verification/benchmark-mac-reference-20261005T195215Z.txt`.
+
+| Saved world / view | Average FPS | p99 ms | Visible renderers | Main/GPU mean ms |
+| --- | ---: | ---: | ---: | ---: |
+| Mixed reference, idle/stationary | 248.263 | 4.542 | 4,800 | 3.987 / 3.164 |
+| Mixed reference, active/stationary | 209.477 | 6.754 | 4,800 | 4.720 / 3.350 |
+| Mixed reference, idle/flying | 795.379 | 5.495 | 6,483 → 139 | 1.241 / 0.869 |
+| Mixed reference, active/flying | 683.557 | 6.545 | 6,483 → 139 | 1.454 / 0.906 |
+| Mixed reference, sparse gates | 305.402 | 3.620 | 3,632 | 3.033 / 2.448 |
+| Mixed reference, repeated modules | 1,220.397 | 0.955 | 323 | 0.819 / 0.523 |
+| Dense diagnostic, opaque AND bodies | 234.091 | 4.807 | 4,534 | 4.271 / 3.282 |
+
+Both active reference cases processed all 1,200 expected edges. Eight x=16/x=32 boundary operations took 21–52 ms; manual save took 176 ms and load through first frame 306 ms. Dense diagnostic used 5,005 total renderer objects and reached 222 MiB reserved memory, compared with 7,077 renderers in the mixed reference. The shapes differ in visible-object count and circuit structure, so these are observed view costs, not per-object speed claims. Mac numerical first-playable acceptance passes; graphical readability, the manual professor walkthrough, Windows, and CI remain separate unverified checks.
