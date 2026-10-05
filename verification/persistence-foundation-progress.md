@@ -23,14 +23,21 @@ This does **not** yet serialize or strictly parse the version 1 JSON records,
 verify record identity/topology, implement atomic file replacement or backups,
 or reopen a world. It uses only the C# standard library; no new package or
 external service was accessed.
+The local file store now writes a candidate beside the current save, flushes
+and validates it, then replaces the current file while retaining `.previous`.
+Its test writes only under `UnityProject/Temp`, confirms a rejected candidate
+leaves the old bytes intact, and confirms a valid replacement preserves the
+previous bytes. Autosave timing, backup selection, and strict candidate
+validation remain to be integrated.
 
 Offline repository-local NUnit command executed from the repository root:
 
 ```sh
-DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet
+SILICON_SANDBOX_TEST_ROOT="$PWD/UnityProject/Temp/OfflineVerification/StoreTests" DOTNET_CLI_HOME="$PWD/UnityProject/Temp/OfflineVerification/home" DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true NUGET_PACKAGES="$PWD/UnityProject/Temp/OfflineVerification/packages" dotnet run --project UnityProject/Temp/OfflineVerification/EditTestsCompile/EditTestsCompile.csproj --no-restore -v quiet
 ```
 
-Latest result: 129 passed, 0 failed, 0 ignored. Play Mode source compilation
+Latest result: 130 passed, 0 failed, 0 ignored. `bash -n scripts/verify-unity.sh`
+also passed. Play Mode source compilation
 also succeeded with zero warnings/errors. Unity Test Runner and a player build
 for this change did not run because Codex-launched Unity batch mode still
 cannot connect to the Licensing Client.

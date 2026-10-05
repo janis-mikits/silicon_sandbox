@@ -32,6 +32,8 @@ fi
 
 logs="$project/Logs/Verification"
 mkdir -p "$logs"
+export SILICON_SANDBOX_TEST_ROOT="$project/Temp/VerificationTests"
+mkdir -p "$SILICON_SANDBOX_TEST_ROOT"
 export UPM_CACHE_ROOT="$project/.upm-cache"
 run_editor() {
   "$editor" -batchmode -projectPath "$project" -buildTarget "$target" "$@"

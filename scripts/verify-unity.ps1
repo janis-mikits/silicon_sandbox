@@ -14,6 +14,8 @@ if ($Editor -notmatch [regex]::Escape($version)) { throw "Editor path does not m
 
 $logs = Join-Path $project 'Logs/Verification'
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
+$env:SILICON_SANDBOX_TEST_ROOT = Join-Path $project 'Temp/VerificationTests'
+New-Item -ItemType Directory -Path $env:SILICON_SANDBOX_TEST_ROOT -Force | Out-Null
 $env:UPM_CACHE_ROOT = Join-Path $project '.upm-cache'
 
 function Invoke-Unity([string[]]$UnityArguments) {
