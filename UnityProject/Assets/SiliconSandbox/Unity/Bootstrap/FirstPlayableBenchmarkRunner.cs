@@ -14,13 +14,13 @@ using BigInteger = System.Numerics.BigInteger;
 
 namespace SiliconSandbox.Bootstrap
 {
-    // Opt-in graphical-player measurement. Until the V1 reference archive is
-    // frozen, its output is explicitly preliminary, never an acceptance pass.
+    // Opt-in graphical-player measurement against the frozen V1 reference.
     public sealed class FirstPlayableBenchmarkRunner : MonoBehaviour
     {
         public const string OutputVariable = "SILICON_SANDBOX_BENCHMARK_OUTPUT";
         private const double WarmupSeconds = 10d;
         private const double MeasureSeconds = 60d;
+        private const string ReferenceName = "first-playable-1000-gates";
         private PlayableWorldBootstrap bootstrap;
         private string outputPath;
         private OneBitWorldSession session;
@@ -46,6 +46,9 @@ namespace SiliconSandbox.Bootstrap
                 Finish("UNVERIFIED: graphical player required; batch mode has no rendered FPS.", 1);
                 yield break;
             }
+            // A terminal-launched graphical player may not own focus. Keep the
+            // fixed-duration measurement advancing while the window is behind it.
+            UnityEngine.Application.runInBackground = true;
             var standard = Array.IndexOf(QualitySettings.names, "Standard");
             if (standard < 0)
             {
@@ -55,7 +58,10 @@ namespace SiliconSandbox.Bootstrap
             QualitySettings.SetQualityLevel(standard, true);
             QualitySettings.vSyncCount = 0;
             UnityEngine.Application.targetFrameRate = -1;
-            Screen.SetResolution(1920, 1080, FullScreenMode.Windowed);
+            // macOS Retina desktops may reject a 1920x1080 window when the
+            // logical desktop is smaller; fullscreen-window keeps the display
+            // mode while requesting a 1920x1080 rendered content resolution.
+            Screen.SetResolution(1920, 1080, FullScreenMode.FullScreenWindow);
             yield return null;
             if (Screen.width != 1920 || Screen.height != 1080)
             {
@@ -64,15 +70,30 @@ namespace SiliconSandbox.Bootstrap
                 yield break;
             }
 
-            var fixture = FirstPlayableBenchmarkFactory.Create();
-            var blank = bootstrap.CaptureCurrentWorld();
-            var versions = new Dictionary<Guid, OneBitModuleVersion>
-            { [fixture.Version.VersionId] = fixture.Version };
-            var pose = new SavedPlayerPose(30d, 0.3d, 12d, 1d, 0d, 0d);
-            bootstrap.OpenWorld(new WorldSaveSnapshot(blank.WorldId,
-                "First-playable benchmark", blank.FloorMaterialId,
-                blank.WallStyleId, "10", pose, blank.InventorySlots,
-                blank.SelectedHotbarSlot, fixture.World, versions));
+            WorldSaveSnapshot snapshot;
+            string referenceHash;
+            try
+            {
+                var directory = Path.Combine(UnityEngine.Application.streamingAssetsPath,
+                    "Benchmarks");
+                var archive = File.ReadAllBytes(Path.Combine(directory,
+                    ReferenceName + ".ssworld"));
+                referenceHash = File.ReadAllText(Path.Combine(directory,
+                    ReferenceName + ".sha256")).Trim();
+                if (!string.Equals(WorldManifestIntegrity.Sha256Hex(archive),
+                    referenceHash, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Reference SHA-256 mismatch.");
+                using (var stream = new MemoryStream(archive))
+                    snapshot = WorldV1ArchiveCodec.Read(stream).Snapshot;
+                ValidateReference(snapshot);
+            }
+            catch (Exception error)
+            {
+                Finish("UNVERIFIED: reference archive failed validation: " +
+                    error.Message, 1);
+                yield break;
+            }
+            bootstrap.OpenWorld(snapshot);
             bootstrap.Interaction.enabled = false;
             var controller = bootstrap.Interaction.GetComponent<
                 SiliconSandbox.Interaction.CreativeCameraController>();
@@ -82,8 +103,8 @@ namespace SiliconSandbox.Bootstrap
             session = bootstrap.Session;
             yield return null;
 
-            report.AppendLine("PRELIMINARY: generated in-memory reference; saved V1 archive/hash not frozen.");
-            report.AppendLine("This report cannot establish first-playable performance acceptance.");
+            report.AppendLine("REFERENCE ARCHIVE SHA-256=" + referenceHash);
+            report.AppendLine("Frame and clock measurements alone do not establish full performance acceptance.");
             report.AppendLine("OS=" + SystemInfo.operatingSystem);
             report.AppendLine("CPU=" + SystemInfo.processorType);
             report.AppendLine("CPU logical cores=" + SystemInfo.processorCount);
@@ -104,10 +125,10 @@ namespace SiliconSandbox.Bootstrap
             report.AppendLine("Standalone AND gates=500 module instances=10" +
                 " AND gates per instance=50 equivalent gates=1000");
             var segments = 0;
-            foreach (var route in fixture.World.Topology.Connectors)
+            foreach (var route in snapshot.Design.Topology.Connectors)
                 segments += route.Spans.Count;
             report.AppendLine("World connectors=" +
-                fixture.World.Topology.Connectors.Count +
+                snapshot.Design.Topology.Connectors.Count +
                 " visible spans=" + segments +
                 " harness width=1 registers=0");
             report.AppendLine("Rendered scene objects=" +
@@ -119,7 +140,27 @@ namespace SiliconSandbox.Bootstrap
             yield return RunCase("active/stationary", true, false);
             yield return RunCase("idle/flying", false, true);
             yield return RunCase("active/flying", true, true);
-            Finish("PRELIMINARY RUN COMPLETE", 0);
+            Finish("REFERENCE FRAME RUN COMPLETE", 0);
+        }
+
+        private static void ValidateReference(WorldSaveSnapshot snapshot)
+        {
+            var standalone = 0;
+            foreach (var component in snapshot.Design.Components)
+                if (component.TypeId == BuiltInPinCatalog.And) standalone++;
+            if (standalone != 500 || snapshot.Design.Modules.Count != 10 ||
+                snapshot.ModuleVersions.Count != 1 ||
+                snapshot.Design.Topology.Connectors.Count != 1011)
+                throw new InvalidDataException("Reference world distribution changed.");
+            foreach (var version in snapshot.ModuleVersions.Values)
+            {
+                var internalGates = 0;
+                foreach (var component in version.Components)
+                    if (component.TypeId == BuiltInPinCatalog.And)
+                        internalGates++;
+                if (internalGates != 50)
+                    throw new InvalidDataException("Reference module changed.");
+            }
         }
 
         private IEnumerator RunCase(string name, bool active, bool flying)

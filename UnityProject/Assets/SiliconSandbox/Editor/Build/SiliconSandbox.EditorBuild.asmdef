@@ -1,7 +1,7 @@
 {
   "name": "SiliconSandbox.EditorBuild",
   "rootNamespace": "SiliconSandbox.EditorBuild",
-  "references": ["SiliconSandbox.Bootstrap"],
+  "references": ["SiliconSandbox.Bootstrap", "SiliconSandbox.Application", "SiliconSandbox.Authoring", "SiliconSandbox.Persistence"],
   "includePlatforms": ["Editor"],
   "autoReferenced": false
 }

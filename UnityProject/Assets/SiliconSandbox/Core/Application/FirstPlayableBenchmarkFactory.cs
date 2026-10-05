@@ -30,6 +30,16 @@ namespace SiliconSandbox.Application
         {
             var id = 0UL;
             Func<Guid> nextId = () => BenchmarkId(++id);
+            return Create(nextId);
+        }
+
+        // Called once by the Editor reference-asset builder. The committed
+        // archive freezes these randomly generated authored UUIDv4 values.
+        public static FirstPlayableBenchmarkFixture CreateSavedReference() =>
+            Create(Guid.NewGuid);
+
+        private static FirstPlayableBenchmarkFixture Create(Func<Guid> nextId)
+        {
             var components = new List<PlacedOneBitComponent>();
             var pins = new List<AuthoredPin>();
             var routes = new List<ConnectorRoute>();

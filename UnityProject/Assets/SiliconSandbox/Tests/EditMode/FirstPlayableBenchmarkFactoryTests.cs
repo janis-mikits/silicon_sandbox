@@ -1,15 +1,50 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using NUnit.Framework;
 using SiliconSandbox.Application;
 using SiliconSandbox.Authoring;
 using SiliconSandbox.Contracts;
 using SiliconSandbox.Simulation;
+using SiliconSandbox.Persistence;
 
 namespace SiliconSandbox.Tests.EditMode
 {
     public sealed class FirstPlayableBenchmarkFactoryTests
     {
+        [Test]
+        public void FrozenSavedReferenceHasExpectedBytesAndDistribution()
+        {
+            const string expectedSha256 =
+                "ccbfc944c7ef245141d13a6b1183c0cb7785f34088694ea114414e5454e26967";
+            var path = Path.Combine(UnityEngine.Application.streamingAssetsPath,
+                "Benchmarks/first-playable-1000-gates.ssworld");
+            var bytes = File.ReadAllBytes(path);
+            Assert.That(WorldManifestIntegrity.Sha256Hex(bytes),
+                Is.EqualTo(expectedSha256));
+            using (var stream = new MemoryStream(bytes))
+            {
+                var loaded = WorldV1ArchiveCodec.Read(stream);
+                var world = loaded.Snapshot.Design;
+                var standalone = 0;
+                foreach (var component in world.Components)
+                    if (component.TypeId == BuiltInPinCatalog.And)
+                        standalone++;
+                Assert.That(standalone, Is.EqualTo(500));
+                Assert.That(world.Modules.Count, Is.EqualTo(10));
+                Assert.That(loaded.Snapshot.ModuleVersions.Count, Is.EqualTo(1));
+                foreach (var version in loaded.Snapshot.ModuleVersions.Values)
+                {
+                    var internalGates = 0;
+                    foreach (var component in version.Components)
+                        if (component.TypeId == BuiltInPinCatalog.And)
+                            internalGates++;
+                    Assert.That(internalGates, Is.EqualTo(50));
+                }
+                Assert.That(loaded.UnavailableModuleVersionIds, Is.Empty);
+            }
+        }
+
         [Test]
         public void MixedFixtureProcessesEveryTenHertzEdgeForSixtySimulatedSeconds()
         {
