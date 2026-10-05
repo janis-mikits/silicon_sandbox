@@ -12,6 +12,27 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class GraphDrivenCircuitTests
     {
         [Test]
+        public void SyntheticZeroDelayInverterLoopExhaustsDefaultWorkBudget()
+        {
+            // A test-only inverter drives its own input. It has no fixed point:
+            // 0 must produce 1, and 1 must produce 0, forever at one timestamp.
+            // This exercises the same worklist guard used by the playable subset
+            // without adding an unsupported inverter to the authored catalog.
+            var guard = new DeltaConvergenceGuard(1024, 1);
+            var value = LogicBit.Zero;
+            var evaluations = 0;
+            while (guard.TryEvaluate())
+            {
+                value = value == LogicBit.Zero ? LogicBit.One : LogicBit.Zero;
+                evaluations++;
+            }
+            Assert.That(evaluations, Is.EqualTo(1024));
+            Assert.That(value, Is.EqualTo(LogicBit.Zero));
+            Assert.That(guard.TryEvaluate(), Is.False,
+                "A zero-delay 0/1 alternation cannot be reported settled.");
+        }
+
+        [Test]
         public void FeedbackWithKnownZeroSeedConvergesWhileUnseededLoopRemainsUnknown()
         {
             var one = new SourceBinding(Guid.NewGuid(), 1,

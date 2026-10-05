@@ -184,15 +184,16 @@ namespace SiliconSandbox.Simulation
             if (maximumDeltaPasses < 1) throw new ArgumentOutOfRangeException(nameof(maximumDeltaPasses));
             if (ConvergenceDiagnostic != null) return;
             changedDuringSettle = new HashSet<int>();
+            var evaluationsPerPass = 1L + plan.Sources.Count +
+                plan.AndGates.Count + plan.SrFlipFlops.Count +
+                plan.MissingModuleOutputs.Count + plan.NetCount;
+            var guard = new DeltaConvergenceGuard(maximumDeltaPasses,
+                evaluationsPerPass);
             for (var pass = 0; pass < maximumDeltaPasses; pass++)
             {
-                long evaluations = 0;
-                var limit = (long)maximumDeltaPasses *
-                    (plan.Sources.Count + plan.AndGates.Count + plan.SrFlipFlops.Count +
-                     plan.MissingModuleOutputs.Count + plan.NetCount + 1);
                 while (pending.Count > 0)
                 {
-                    if (++evaluations > limit)
+                    if (!guard.TryEvaluate())
                     {
                         MarkNonsettling();
                         return;
