@@ -43,13 +43,13 @@ namespace SiliconSandbox.Tests.EditMode
                 Is.EqualTo(LogicBit.Zero), "0 AND undriven B is zero.");
 
             session.BreakSpan(route.Id, span.Id);
-            Assert.That(session.Design.Topology.Connectors.Count, Is.EqualTo(2));
+            Assert.That(session.Design.Topology.Connectors.Count, Is.Zero,
+                "Breaking the last span releases both occupied pins.");
+            Assert.That(session.Design.Topology.Joins.Count, Is.Zero);
             Assert.That(session.Circuit.Net(session.Built.NetIndex(gateA)).Value,
                 Is.EqualTo(LogicBit.Z));
             Assert.That(session.Circuit.Net(session.Built.NetIndex(y)).Value,
                 Is.EqualTo(LogicBit.X), "Z AND undriven B is X.");
-            foreach (var piece in session.Design.Topology.Connectors)
-                Assert.That(piece.Id, Is.Not.EqualTo(route.Id));
         }
 
         [Test]

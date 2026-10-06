@@ -116,6 +116,24 @@ namespace SiliconSandbox.Application
                 edit.Design, Design.Modules));
         }
 
+        public void BreakConnector(Guid connectorId)
+        {
+            SafePause();
+            Publish(OneBitWorldEdits.BreakConnector(Design, connectorId));
+        }
+
+        public void BreakComponent(Guid objectId)
+        {
+            SafePause();
+            Publish(OneBitWorldEdits.BreakComponent(Design, objectId));
+        }
+
+        public void BreakModule(Guid objectId)
+        {
+            SafePause();
+            Publish(OneBitWorldEdits.BreakModule(Design, objectId));
+        }
+
         public void PlaceConnector(ConnectorRoute connector,
             IEnumerable<ElectricalJoin> joins)
         {
@@ -135,6 +153,13 @@ namespace SiliconSandbox.Application
         {
             SafePause();
             Publish(OneBitWorldEdits.AttachWorldClockPin(Design, srObjectId));
+        }
+
+        public void AttachWorldClockPin(Guid objectId, Guid pinId)
+        {
+            SafePause();
+            Publish(OneBitWorldEdits.AttachWorldClockPin(Design,
+                objectId, pinId));
         }
 
         public void AttachWorldClockPort(Guid moduleObjectId, Guid portId)

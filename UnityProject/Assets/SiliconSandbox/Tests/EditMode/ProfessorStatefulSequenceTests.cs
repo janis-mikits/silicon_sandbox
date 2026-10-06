@@ -23,8 +23,6 @@ namespace SiliconSandbox.Tests.EditMode
             var originalSr = session.Design.Components[0];
             var draft = session.PreviewPackage(new CellRegion(
                 originalSr.AnchorCell, originalSr.AnchorCell), "SR memory");
-            for (var i = draft.Ports.Count - 1; i >= 0; i--)
-                if (draft.Ports[i].Name == "Q_bar") draft.RemovePort(i);
             var staged = OneBitPackageStager.Prepare(context, draft,
                 Guid.NewGuid(), new SavedPlayerPose(8, 2, 8, 0, 0, 1));
             var version = staged.Version;
@@ -32,7 +30,7 @@ namespace SiliconSandbox.Tests.EditMode
             session = context.Session;
             Assert.That(session.Design.Components[0].Id, Is.EqualTo(originalSr.Id),
                 "Packaging leaves the source circuit in the world.");
-            Assert.That(version.Ports.Count, Is.EqualTo(4));
+            Assert.That(version.Ports.Count, Is.EqualTo(5));
 
             session.PlaceModule(version, "A", new GridCell(6, 1, 6),
                 GridOrientation.Default);

@@ -29,6 +29,14 @@ namespace SiliconSandbox.Application
         public static OneBitModuleVersion Create(OneBitModuleSnapshot snapshot,
             Guid familyId, string name, IEnumerable<OneBitPortChoice> choices)
         {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            return Create(snapshot, snapshot.SizeCells, familyId, name, choices);
+        }
+
+        public static OneBitModuleVersion Create(OneBitModuleSnapshot snapshot,
+            GridCell exteriorSizeCells, Guid familyId, string name,
+            IEnumerable<OneBitPortChoice> choices)
+        {
             if (snapshot == null || choices == null)
                 throw new ArgumentNullException();
             var graph = OneBitTopologyGraphBuilder.Build(snapshot.Topology);
@@ -49,7 +57,8 @@ namespace SiliconSandbox.Application
                     choice.BitZeroTarget));
             }
             return new OneBitModuleVersion(familyId, Guid.NewGuid(), name,
-                snapshot.SizeCells, snapshot.Components, snapshot.Topology, ports);
+                snapshot.SizeCells, exteriorSizeCells, snapshot.Components,
+                snapshot.Topology, ports);
         }
     }
 }

@@ -50,9 +50,9 @@ namespace SiliconSandbox.Tests.EditMode
         public void FrozenSavedReferenceHasExpectedBytesAndDistribution()
         {
             const string expectedSha256 =
-                "ccbfc944c7ef245141d13a6b1183c0cb7785f34088694ea114414e5454e26967";
+                "016e9cff9773be7cb0b931a7d7492b8a9ec856b79418e445a39ec0acf1c95c3c";
             var path = Path.Combine(UnityEngine.Application.streamingAssetsPath,
-                "Benchmarks/first-playable-1000-gates.ssworld");
+                "Benchmarks/first-playable-1000-gates-compact-v1.ssworld");
             var bytes = File.ReadAllBytes(path);
             Assert.That(WorldManifestIntegrity.Sha256Hex(bytes),
                 Is.EqualTo(expectedSha256));

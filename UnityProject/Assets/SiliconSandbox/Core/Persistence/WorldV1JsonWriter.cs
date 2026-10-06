@@ -64,6 +64,8 @@ namespace SiliconSandbox.Persistence
             json.Name("name"); json.String(version.Name);
             json.Name("sizeCells");
             V1DesignJsonWriter.Cell(json, version.SizeCells);
+            json.Name("exteriorSizeCells");
+            V1DesignJsonWriter.Cell(json, version.ExteriorSizeCells);
             json.Name("ports"); json.BeginArray();
             foreach (var port in version.Ports)
             {

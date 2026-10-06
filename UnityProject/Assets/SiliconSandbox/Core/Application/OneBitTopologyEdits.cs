@@ -99,7 +99,38 @@ namespace SiliconSandbox.Application
                             queue.Enqueue(neighbor);
                         }
                 }
-                pieces.Add(piece);
+                // Discard a zero-length wire tail only when it is attached
+                // to a pin and no other connector: otherwise it would keep
+                // the pin occupied after its last visible span broke. A
+                // one-node bridge to another visible connector is retained.
+                // Preserve the clock Net Link anchor under its identity rule.
+                var hasSpan = remaining.Exists(span =>
+                    piece.Contains(span.FromNodeId));
+                var occupiesPin = false;
+                var bridgesConnector = false;
+                if (!hasSpan && target.Kind == "wire")
+                    foreach (var join in original.Joins)
+                    {
+                        var hasNode = false;
+                        var hasPin = false;
+                        foreach (var member in join.Members)
+                        {
+                            if (member.Kind == JoinTargetKind.ConnectorNode &&
+                                member.OwnerId == connectorId &&
+                                piece.Contains(member.PartId)) hasNode = true;
+                            if (member.Kind == JoinTargetKind.ComponentPin ||
+                                member.Kind == JoinTargetKind.ModulePortBit)
+                                hasPin = true;
+                        }
+                        if (hasNode && hasPin) occupiesPin = true;
+                        if (hasNode)
+                            foreach (var member in join.Members)
+                                if (member.Kind == JoinTargetKind.ConnectorNode &&
+                                    member.OwnerId != connectorId)
+                                    bridgesConnector = true;
+                    }
+                if (!occupiesPin || bridgesConnector)
+                    pieces.Add(piece);
             }
 
             var replacementIds = new List<Guid>();
@@ -161,14 +192,20 @@ namespace SiliconSandbox.Application
             {
                 var members = new List<JoinMember>();
                 foreach (var member in join.Members)
-                    members.Add(member.Kind == JoinTargetKind.ConnectorNode &&
-                        member.OwnerId == connectorId
-                        ? JoinMember.ConnectorNode(nodeOwners[member.PartId], member.PartId)
-                        : member);
-                joins.Add(new ElectricalJoin(join.Id, members));
+                {
+                    if (member.Kind == JoinTargetKind.ConnectorNode &&
+                        member.OwnerId == connectorId)
+                    {
+                        if (nodeOwners.TryGetValue(member.PartId, out var owner))
+                            members.Add(JoinMember.ConnectorNode(owner, member.PartId));
+                    }
+                    else members.Add(member);
+                }
+                if (members.Count >= 2)
+                    joins.Add(new ElectricalJoin(join.Id, members));
             }
             return Validated(original.Pins, original.ModulePorts, routes, joins,
-                pieces.Count > 1 ? connectorId : Guid.Empty, replacementIds);
+                pieces.Count != 1 ? connectorId : Guid.Empty, replacementIds);
         }
 
         private static TopologyEditResult Validated(IEnumerable<AuthoredPin> pins,

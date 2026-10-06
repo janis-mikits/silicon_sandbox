@@ -15,7 +15,7 @@ namespace SiliconSandbox.Application
     public sealed class OneBitWorldContext
     {
         public Guid WorldId { get; }
-        public string WorldName { get; }
+        public string WorldName { get; private set; }
         public string FloorMaterialId { get; }
         public string WallStyleId { get; }
         public OneBitWorldSession Session { get; }
@@ -62,6 +62,13 @@ namespace SiliconSandbox.Application
             OneBitSaveBoundary.Capture(Session, WorldId, WorldName,
                 FloorMaterialId, WallStyleId, player, Inventory.Slots,
                 Inventory.SelectedHotbarSlot);
+
+        public void RenameWorld(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("World name cannot be empty.");
+            WorldName = name.Trim();
+        }
 
         // Call only after the recoverable world/library transaction has
         // published and verified every file. This updates the live inventory

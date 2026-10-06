@@ -14,9 +14,9 @@ namespace SiliconSandbox.EditorBuild
         private const string DirectoryPath =
             "Assets/StreamingAssets/Benchmarks";
         private const string ArchivePath = DirectoryPath +
-            "/first-playable-1000-gates.ssworld";
+            "/first-playable-1000-gates-compact-v1.ssworld";
         private const string HashPath = DirectoryPath +
-            "/first-playable-1000-gates.sha256";
+            "/first-playable-1000-gates-compact-v1.sha256";
         private const string DenseArchivePath = DirectoryPath +
             "/first-playable-dense-diagnostic.ssworld";
         private const string DenseHashPath = DirectoryPath +

@@ -34,7 +34,10 @@ namespace SiliconSandbox.Authoring
         public Guid FamilyId { get; }
         public Guid VersionId { get; }
         public string Name { get; }
+        // Captured internal design bounds, retained for viewing/re-expansion.
         public GridCell SizeCells { get; }
+        // Compact occupied exterior bounds, used for placement and ports.
+        public GridCell ExteriorSizeCells { get; }
         public IReadOnlyList<PlacedOneBitComponent> Components { get; }
         public OneBitAuthoredTopology Topology { get; }
         public IReadOnlyList<OneBitModulePort> Ports { get; }
@@ -43,11 +46,22 @@ namespace SiliconSandbox.Authoring
         public OneBitModuleVersion(Guid familyId, Guid versionId, string name,
             GridCell sizeCells, IEnumerable<PlacedOneBitComponent> components,
             OneBitAuthoredTopology topology, IEnumerable<OneBitModulePort> ports)
+            : this(familyId, versionId, name, sizeCells, sizeCells, components,
+                topology, ports)
+        {
+        }
+
+        public OneBitModuleVersion(Guid familyId, Guid versionId, string name,
+            GridCell sizeCells, GridCell exteriorSizeCells,
+            IEnumerable<PlacedOneBitComponent> components,
+            OneBitAuthoredTopology topology, IEnumerable<OneBitModulePort> ports)
         {
             if (familyId == Guid.Empty || versionId == Guid.Empty ||
                 string.IsNullOrWhiteSpace(name) || components == null ||
                 topology == null || ports == null || sizeCells.X < 1 ||
-                sizeCells.Y < 1 || sizeCells.Z < 1)
+                sizeCells.Y < 1 || sizeCells.Z < 1 ||
+                exteriorSizeCells.X < 1 || exteriorSizeCells.Y < 1 ||
+                exteriorSizeCells.Z < 1)
                 throw new ArgumentException("Incomplete fixed module version.");
             var copiedComponents = new List<PlacedOneBitComponent>(components);
             var copiedPorts = new List<OneBitModulePort>(ports);
@@ -66,7 +80,7 @@ namespace SiliconSandbox.Authoring
                     string.IsNullOrWhiteSpace(port.Name) ||
                     !Enum.IsDefined(typeof(OneBitPortDirection), port.Direction) ||
                     !names.Add(port.Name) || !portIds.Add(port.Id) ||
-                    !Exterior(sizeCells, port.LocalCell, port.PointQ) ||
+                    !Exterior(exteriorSizeCells, port.LocalCell, port.PointQ) ||
                     !facePositions.Add((port.LocalCell, port.PointQ)) ||
                     !endpoints.Contains(port.BitZeroTarget))
                     throw new ArgumentException("Invalid, duplicate, or unmapped module port.");
@@ -75,6 +89,7 @@ namespace SiliconSandbox.Authoring
             VersionId = versionId;
             Name = name;
             SizeCells = sizeCells;
+            ExteriorSizeCells = exteriorSizeCells;
             Components = copiedComponents.AsReadOnly();
             Topology = topology;
             Ports = copiedPorts.AsReadOnly();

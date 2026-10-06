@@ -28,7 +28,7 @@ def main() -> None:
     if "DIAGNOSTIC ONLY:" in report or "Resolution=1920x1080" not in report:
         raise SystemExit("Strict benchmark did not use the required 1920x1080 resolution.")
     if ("REFERENCE ARCHIVE SHA-256="
-            "ccbfc944c7ef245141d13a6b1183c0cb7785f34088694ea114414e5454e26967"
+            "016e9cff9773be7cb0b931a7d7492b8a9ec856b79418e445a39ec0acf1c95c3c"
             not in report):
         raise SystemExit("Benchmark reference hash is missing or changed.")
     if ("DENSE DIAGNOSTIC SHA-256="

@@ -71,7 +71,7 @@ namespace SiliconSandbox.Bootstrap
             Interaction.Attach(Session, controller, Inventory);
             Interaction.SetPersistenceActions(SaveCurrentWorldFile,
                 ReopenCurrentWorldFile, PublishPackage, ListSavedWorlds,
-                OpenRecoveryChoice);
+                OpenRecoveryChoice, () => Context.WorldName, RenameCurrentWorld);
             nextAutosaveRealtime = Time.realtimeSinceStartupAsDouble + 300d;
 
             var output = Environment.GetEnvironmentVariable(SmokeOutputVariable);
@@ -135,6 +135,13 @@ namespace SiliconSandbox.Bootstrap
             var look = playerCamera.transform.forward.normalized;
             return Context.Capture(new SavedPlayerPose(position.x,
                 position.y, position.z, look.x, look.y, look.z));
+        }
+
+        public string RenameCurrentWorld(string name)
+        {
+            if (Context == null) throw new InvalidOperationException("World is not ready.");
+            Context.RenameWorld(name);
+            return "World named: " + Context.WorldName;
         }
 
         public void OpenWorld(WorldSaveSnapshot saved)

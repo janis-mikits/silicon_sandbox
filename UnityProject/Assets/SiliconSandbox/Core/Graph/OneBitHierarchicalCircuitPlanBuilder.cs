@@ -150,7 +150,7 @@ namespace SiliconSandbox.Graph
         private static void CheckInterface(PlacedOneBitModuleInstance instance,
             OneBitModuleVersion version)
         {
-            if (!instance.SizeCells.Equals(version.SizeCells) ||
+            if (!instance.SizeCells.Equals(version.ExteriorSizeCells) ||
                 instance.InterfacePorts.Count != version.Ports.Count)
                 throw new ArgumentException("Placed interface disagrees with exact version.");
             var versionPorts = new Dictionary<Guid, OneBitModulePort>();

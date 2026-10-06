@@ -9,6 +9,25 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class OneBitWorldClockPlacementTests
     {
         [Test]
+        public void ClockLinkDrivesAndInputButCannotAttachToOutput()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(
+                new WorldBounds(8, 8, 4)), "10");
+            session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(3, 1, 3), GridOrientation.Default);
+            var gate = session.Design.Components[0];
+            var input = JoinMember.ComponentPin(gate.Id, gate.PinIds["A"]);
+            session.AttachWorldClockPin(gate.Id, gate.PinIds["A"]);
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(input)).Value,
+                Is.EqualTo(LogicBit.Zero));
+            session.Scheduler.StepClockEdge();
+            Assert.That(session.Circuit.Net(session.Built.NetIndex(input)).Value,
+                Is.EqualTo(LogicBit.One));
+            Assert.Throws<ArgumentException>(() => session.AttachWorldClockPin(
+                gate.Id, gate.PinIds["Y"]));
+        }
+
+        [Test]
         public void TwoVisibleStubsShareWorldClockButKeepPhysicalIdentities()
         {
             var session = new OneBitWorldSession(OneBitWorldDesign.Empty(

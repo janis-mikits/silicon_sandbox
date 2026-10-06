@@ -31,6 +31,7 @@ namespace SiliconSandbox.Interaction
         private GameObject rotationRoot;
         private OneBitRotationPreview rotationPreview;
         private GameObject selectionRoot;
+        private Material selectionLineMaterial;
         private GridCell? selectionFirst;
         private GridCell? selectionSecond;
         private OneBitPackageDraft packageDraft;
@@ -54,11 +55,15 @@ namespace SiliconSandbox.Interaction
         private Func<OneBitPackageDraft, string> publishPackage;
         private Func<IReadOnlyList<WorldRecoveryChoice>> listSavedWorlds;
         private Func<WorldRecoveryChoice, string> loadSavedWorld;
+        private Func<string> currentWorldName;
+        private Func<string, string> renameWorld;
+        private string worldNameText = "";
         private IReadOnlyList<WorldRecoveryChoice> savedWorldChoices =
             Array.Empty<WorldRecoveryChoice>();
         private bool browseWorlds;
         private Vector2 savedWorldScroll;
         private Vector2 internalInspectScroll;
+        private Vector2 packageScroll;
         private string persistenceMessage = "";
         private bool hudVisible = true;
         private Guid configureSourceId;
@@ -129,19 +134,24 @@ namespace SiliconSandbox.Interaction
             viewCamera = player.CameraPivot.GetComponent<Camera>();
             if (viewCamera == null) throw new ArgumentException("Player camera is missing.");
             frequencyText = session.Scheduler.FrequencyHz;
+            if (currentWorldName != null) worldNameText = currentWorldName();
             player.SetInterfaceOpen(false);
         }
 
         public void SetPersistenceActions(Func<string> save, Func<string> reopen,
             Func<OneBitPackageDraft, string> publish,
             Func<IReadOnlyList<WorldRecoveryChoice>> list,
-            Func<WorldRecoveryChoice, string> load)
+            Func<WorldRecoveryChoice, string> load,
+            Func<string> worldName, Func<string, string> rename)
         {
             saveWorld = save ?? throw new ArgumentNullException(nameof(save));
             reopenWorld = reopen ?? throw new ArgumentNullException(nameof(reopen));
             publishPackage = publish ?? throw new ArgumentNullException(nameof(publish));
             listSavedWorlds = list ?? throw new ArgumentNullException(nameof(list));
             loadSavedWorld = load ?? throw new ArgumentNullException(nameof(load));
+            currentWorldName = worldName ?? throw new ArgumentNullException(nameof(worldName));
+            renameWorld = rename ?? throw new ArgumentNullException(nameof(rename));
+            worldNameText = currentWorldName();
         }
 
         private void Update()
@@ -263,9 +273,28 @@ namespace SiliconSandbox.Interaction
                 hovered.Kind == WorldPartKind.ComponentBody &&
                 IsSource(hovered.OwnerId))
                 OpenSourceConfigure(hovered.OwnerId);
-            if (Input.GetMouseButtonDown(0) && hovered != null &&
-                hovered.Kind == WorldPartKind.ConnectorSpan)
-                TryEdit(() => session.BreakSpan(hovered.OwnerId, hovered.PartId));
+            if (Input.GetMouseButtonDown(0) && hovered != null)
+            {
+                var target = hovered;
+                switch (target.Kind)
+                {
+                    case WorldPartKind.ConnectorSpan:
+                        TryEdit(() => session.BreakSpan(target.OwnerId,
+                            target.PartId));
+                        break;
+                    case WorldPartKind.ConnectorNode:
+                        TryEdit(() => session.BreakConnector(target.OwnerId));
+                        break;
+                    case WorldPartKind.ComponentBody:
+                    case WorldPartKind.ComponentPin:
+                        TryEdit(() => session.BreakComponent(target.OwnerId));
+                        break;
+                    case WorldPartKind.ModuleBody:
+                    case WorldPartKind.ModulePort:
+                        TryEdit(() => session.BreakModule(target.OwnerId));
+                        break;
+                }
+            }
             if (Input.GetMouseButtonDown(1)) RightClick();
         }
 
@@ -351,7 +380,8 @@ namespace SiliconSandbox.Interaction
                 if (hovered.Kind == WorldPartKind.ModulePort)
                     TryEdit(() => session.AttachWorldClockPort(
                         hovered.OwnerId, hovered.PartId));
-                else TryEdit(() => session.AttachWorldClockPin(hovered.OwnerId));
+                else TryEdit(() => session.AttachWorldClockPin(
+                    hovered.OwnerId, hovered.PartId));
                 return;
             }
             var typeId = SelectedComponentType();
@@ -554,13 +584,12 @@ namespace SiliconSandbox.Interaction
         private bool IsClockTarget(WorldSelectablePart part)
         {
             if (part.Kind == WorldPartKind.ComponentPin)
-                return IsSrClockPin(part.OwnerId, part.PartId);
+                return IsInputPin(part.OwnerId, part.PartId);
             foreach (var module in session.Design.Modules)
                 if (module.Id == part.OwnerId)
                     foreach (var port in module.InterfacePorts)
                         if (port.Id == part.PartId)
-                            return port.Name == "CLK" &&
-                                port.Direction != OneBitPortDirection.Output;
+                            return port.Direction != OneBitPortDirection.Output;
             return false;
         }
 
@@ -617,7 +646,7 @@ namespace SiliconSandbox.Interaction
                             Guid.NewGuid(), Guid.NewGuid(),
                             moduleVersion.FamilyId, moduleVersion.VersionId,
                             ghostModuleName, cell, orientation,
-                            moduleVersion.SizeCells, ports);
+                            moduleVersion.ExteriorSizeCells, ports);
                         OneBitWorldEdits.PlaceModule(session.Design,
                             moduleVersion, ghostModuleName, cell, orientation);
                     }
@@ -692,6 +721,7 @@ namespace SiliconSandbox.Interaction
             if (ghostRoot != null) Destroy(ghostRoot);
             if (rotationRoot != null) Destroy(rotationRoot);
             if (selectionRoot != null) Destroy(selectionRoot);
+            if (selectionLineMaterial != null) Destroy(selectionLineMaterial);
         }
 
         private bool SelectionCell(out GridCell cell)
@@ -717,19 +747,48 @@ namespace SiliconSandbox.Interaction
             if (!selectionFirst.HasValue) return;
             var region = new CellRegion(selectionFirst.Value,
                 selectionSecond ?? selectionFirst.Value);
-            selectionRoot = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            selectionRoot.name = "Package region preview";
-            selectionRoot.transform.position = new Vector3(
-                (region.Min.X + region.Max.X + 1) * 0.5f,
-                (region.Min.Y + region.Max.Y + 1) * 0.5f,
-                (region.Min.Z + region.Max.Z + 1) * 0.5f);
-            selectionRoot.transform.localScale = new Vector3(
-                region.SizeCells.X, region.SizeCells.Y, region.SizeCells.Z);
-            Destroy(selectionRoot.GetComponent<Collider>());
-            var renderer = selectionRoot.GetComponent<Renderer>();
-            var shader = Shader.Find("Transparent/Diffuse");
-            if (shader != null) renderer.material = new Material(shader);
-            renderer.material.color = new Color(0.15f, 0.55f, 1f, 0.14f);
+            selectionRoot = new GameObject("Package region preview");
+            if (selectionLineMaterial == null)
+            {
+                var shader = Shader.Find("Sprites/Default");
+                if (shader == null) throw new InvalidOperationException(
+                    "Transparent selection-line shader is unavailable.");
+                selectionLineMaterial = new Material(shader);
+            }
+            var min = new Vector3(region.Min.X, region.Min.Y, region.Min.Z);
+            var max = new Vector3(region.Max.X + 1, region.Max.Y + 1,
+                region.Max.Z + 1);
+            var corners = new[]
+            {
+                new Vector3(min.x, min.y, min.z),
+                new Vector3(max.x, min.y, min.z),
+                new Vector3(min.x, max.y, min.z),
+                new Vector3(max.x, max.y, min.z),
+                new Vector3(min.x, min.y, max.z),
+                new Vector3(max.x, min.y, max.z),
+                new Vector3(min.x, max.y, max.z),
+                new Vector3(max.x, max.y, max.z)
+            };
+            var edges = new[]
+            {
+                (0, 1), (0, 2), (0, 4), (1, 3), (1, 5), (2, 3),
+                (2, 6), (3, 7), (4, 5), (4, 6), (5, 7), (6, 7)
+            };
+            foreach (var edge in edges)
+            {
+                var lineObject = new GameObject("Selection edge");
+                lineObject.transform.SetParent(selectionRoot.transform, false);
+                var line = lineObject.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                line.positionCount = 2;
+                line.SetPosition(0, corners[edge.Item1]);
+                line.SetPosition(1, corners[edge.Item2]);
+                line.startWidth = 0.045f;
+                line.endWidth = 0.045f;
+                line.sharedMaterial = selectionLineMaterial;
+                line.startColor = new Color(0.15f, 0.55f, 1f, 0.5f);
+                line.endColor = line.startColor;
+            }
         }
 
         private void BeginRotation(Guid objectId, bool clockwise)
@@ -959,13 +1018,15 @@ namespace SiliconSandbox.Interaction
             return false;
         }
 
-        private bool IsSrClockPin(Guid objectId, Guid pinId)
+        private bool IsInputPin(Guid objectId, Guid pinId)
         {
             foreach (var component in session.Design.Components)
-                if (component.Id == objectId &&
-                    component.TypeId == BuiltInPinCatalog.SrFlipFlop &&
-                    component.PinIds["CLK"] == pinId)
-                    return true;
+                if (component.Id == objectId)
+                    foreach (var geometry in BuiltInPinCatalog.Pins(
+                        component.TypeId, component.TypeVersion))
+                        if (component.PinIds[geometry.Key] == pinId &&
+                            geometry.Direction == PinDirection.Input)
+                            return true;
             return false;
         }
 
@@ -995,6 +1056,7 @@ namespace SiliconSandbox.Interaction
             {
                 packageDraft = null;
                 packageError = "";
+                ClearSelection();
                 player.SetInterfaceOpen(false);
                 return;
             }
@@ -1011,11 +1073,19 @@ namespace SiliconSandbox.Interaction
             }
             if (configureOpen || inventoryOpen || pauseMenuOpen)
             {
+                var wasPausedMenuOpen = pauseMenuOpen;
                 configureOpen = false;
                 inventoryOpen = false;
                 pauseMenuOpen = false;
                 inspectOpen = false;
                 player.SetInterfaceOpen(false);
+                if (wasPausedMenuOpen && session.Scheduler.Diagnostic == null)
+                    session.Scheduler.ResumeSimulation();
+                return;
+            }
+            if (selectionFirst.HasValue)
+            {
+                ClearSelection();
                 return;
             }
             if (session.Scheduler.IsPaused)
@@ -1035,6 +1105,16 @@ namespace SiliconSandbox.Interaction
             }
         }
 
+        private void ClearSelection()
+        {
+            selectionFirst = null;
+            selectionSecond = null;
+            if (selectionRoot == null) return;
+            selectionRoot.SetActive(false);
+            Destroy(selectionRoot);
+            selectionRoot = null;
+        }
+
         private void OnGUI()
         {
             if (session == null) return;
@@ -1048,8 +1128,15 @@ namespace SiliconSandbox.Interaction
             }
             if (hudVisible && packageDraft == null)
             {
-                GUI.Label(new Rect(Screen.width * 0.5f - 8f,
-                    Screen.height * 0.5f - 10f, 18f, 18f), "+");
+                var crosshairStyle = new GUIStyle(GUI.skin.label)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontSize = 60
+                };
+                crosshairStyle.normal.textColor = Color.black;
+                GUI.Label(new Rect(Screen.width * 0.5f - 45f,
+                    Screen.height * 0.5f - 45f, 90f, 90f), "+",
+                    crosshairStyle);
                 var width = 9 * 72f;
                 var left = (Screen.width - width) * 0.5f;
                 for (var i = 0; i < 9; i++)
@@ -1183,82 +1270,100 @@ namespace SiliconSandbox.Interaction
 
         private void DrawPackagePreview()
         {
-            var rect = new Rect((Screen.width - 940f) * 0.5f,
-                (Screen.height - 690f) * 0.5f, 940f, 690f);
-            GUI.Box(rect, "Package configuration preview");
-            GUI.Box(new Rect(rect.x + 15f, rect.y + 28f, 910f, 118f),
-                "Captured circuit and exact port candidates");
-            var size = packageDraft.Snapshot.SizeCells;
-            GUI.Label(new Rect(rect.x + 30f, rect.y + 55f, 850f, 50f),
-                "Size " + size.X + " × " + size.Y + " × " + size.Z +
-                " cells; " + packageDraft.Snapshot.Components.Count +
-                " components; " + packageDraft.Snapshot.Topology.Connectors.Count +
-                " copied connectors; " +
-                packageDraft.Snapshot.PortCandidates.Count +
-                " exposed endpoints. Source world remains unchanged.");
-            GUI.Label(new Rect(rect.x + 30f, rect.y + 112f, 130f, 25f),
-                "Module name:");
-            packageName = GUI.TextField(new Rect(rect.x + 155f, rect.y + 110f,
-                300f, 27f), packageName);
+            var area = new Rect(24f, 24f, Screen.width - 48f,
+                Screen.height - 48f);
+            var oldColor = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.88f);
+            GUI.DrawTexture(area, Texture2D.whiteTexture);
+            GUI.color = oldColor;
+            var font = Mathf.Clamp(Mathf.RoundToInt(Screen.height *
+                (36f / 1080f)), 26, 42);
+            var labelStyle = new GUIStyle(GUI.skin.label)
+            { fontSize = font, wordWrap = true };
+            labelStyle.normal.textColor = Color.white;
+            var buttonStyle = new GUIStyle(GUI.skin.button)
+            { fontSize = font - 3, wordWrap = true };
+            var fieldStyle = new GUIStyle(GUI.skin.textField)
+            { fontSize = font - 3 };
+            GUI.Label(new Rect(area.x + 24f, area.y + 12f,
+                area.width - 48f, 48f), "Package configuration preview",
+                labelStyle);
+            var captured = packageDraft.Snapshot.SizeCells;
+            var exterior = packageDraft.ExteriorSizeCells;
+            GUI.Label(new Rect(area.x + 24f, area.y + 60f,
+                area.width - 48f, 76f),
+                "Captured circuit " + captured.X + " × " + captured.Y +
+                " × " + captured.Z + " cells; exterior " + exterior.X +
+                " × " + exterior.Y + " × " + exterior.Z + "; " +
+                packageDraft.Snapshot.Components.Count + " components; " +
+                packageDraft.Ports.Count + " connected ports. Source stays in place.",
+                labelStyle);
+            GUI.Label(new Rect(area.x + 24f, area.y + 137f, 260f, 50f),
+                "Module name:", labelStyle);
+            packageName = GUI.TextField(new Rect(area.x + 300f, area.y + 137f,
+                Mathf.Min(570f, area.width - 330f), 50f), packageName,
+                fieldStyle);
             packageDraft.Name = packageName;
+
             var faces = new[] { GridDirection.West, GridDirection.East,
                 GridDirection.North, GridDirection.South, GridDirection.Up,
                 GridDirection.Down };
-            for (var faceIndex = 0; faceIndex < faces.Length; faceIndex++)
+            var columns = area.width >= 1360f ? 2 : 1;
+            var rowHeights = new List<float>();
+            for (var start = 0; start < faces.Length; start += columns)
             {
-                var face = faces[faceIndex];
-                var box = new Rect(rect.x + 15f + faceIndex % 3 * 305f,
-                    rect.y + 160f + faceIndex / 3 * 215f, 295f, 205f);
-                GUI.Box(box, GridOrientation.FaceName(face));
-                var row = 0;
-                for (var i = 0; i < packageDraft.Ports.Count; i++)
-                {
-                    var choice = packageDraft.Ports[i];
-                    if (PortFace(choice.PointQ) != face) continue;
-                    if (row >= 5) break;
-                    var y = box.y + 28f + row++ * 32f;
-                    var name = GUI.TextField(new Rect(box.x + 7f, y, 68f, 26f),
-                        choice.Name);
-                    if (name != choice.Name)
-                        packageDraft.ReplacePort(i, new OneBitPortChoice(name,
-                            choice.Direction, choice.LocalCell, choice.PointQ,
-                            choice.BitZeroTarget));
-                    if (GUI.Button(new Rect(box.x + 79f, y, 48f, 26f),
-                        choice.Direction.ToString().Substring(0, 2)))
-                    {
-                        var next = (OneBitPortDirection)
-                            (((int)choice.Direction + 1) % 3);
-                        packageDraft.ReplacePort(i, new OneBitPortChoice(
-                            name, next, choice.LocalCell, choice.PointQ,
-                            choice.BitZeroTarget));
-                    }
-                    if (GUI.Button(new Rect(box.x + 130f, y, 60f, 26f),
-                        EndpointName(choice.BitZeroTarget)))
-                        CyclePortMapping(i);
-                    if (GUI.Button(new Rect(box.x + 193f, y, 54f, 26f),
-                        "Face >")) MovePortToNextFace(i);
-                    if (GUI.Button(new Rect(box.x + 250f, y, 35f, 26f), "X"))
-                    { packageDraft.RemovePort(i); break; }
-                }
+                var height = 0f;
+                for (var j = 0; j < columns && start + j < faces.Length; j++)
+                    height = Mathf.Max(height, 58f +
+                        Mathf.Max(1, CountPortsOnFace(faces[start + j])) * 72f);
+                rowHeights.Add(height);
             }
-            GUI.Label(new Rect(rect.x + 20f, rect.y + 605f, 900f, 30f),
+            var totalHeight = 0f;
+            foreach (var height in rowHeights) totalHeight += height + 16f;
+            var scrollArea = new Rect(area.x + 24f, area.y + 202f,
+                area.width - 48f, area.height - 332f);
+            var contentWidth = scrollArea.width - 22f;
+            var content = new Rect(0f, 0f, contentWidth,
+                Mathf.Max(scrollArea.height, totalHeight));
+            packageScroll = GUI.BeginScrollView(scrollArea, packageScroll,
+                content);
+            var y = 0f;
+            for (var group = 0; group < rowHeights.Count; group++)
+            {
+                var cardWidth = (contentWidth - (columns - 1) * 16f) / columns;
+                for (var col = 0; col < columns; col++)
+                {
+                    var index = group * columns + col;
+                    if (index >= faces.Length) break;
+                    DrawPackageFace(faces[index], new Rect(
+                        col * (cardWidth + 16f), y, cardWidth,
+                        rowHeights[group]), labelStyle, buttonStyle,
+                        fieldStyle);
+                }
+                y += rowHeights[group] + 16f;
+            }
+            GUI.EndScrollView();
+            GUI.Label(new Rect(area.x + 24f, area.yMax - 118f,
+                area.width - 48f, 48f),
                 packageError.Length == 0
-                    ? "Edit names, directions, mappings, and faces; then validate the draft."
-                    : packageError);
-            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 643f,
-                180f, 35f), "Validate draft"))
+                    ? "Every connected port stays; rename, set direction, or move its face."
+                    : packageError, labelStyle);
+            var buttonWidth = Mathf.Min(310f, (area.width - 96f) / 3f);
+            var buttonY = area.yMax - 63f;
+            if (GUI.Button(new Rect(area.x + 24f, buttonY, buttonWidth, 50f),
+                "Validate draft", buttonStyle))
             {
                 try
                 {
                     var candidate = packageDraft.BuildCandidate(Guid.NewGuid());
                     packageError = "Valid fixed design: " + candidate.Ports.Count +
-                        " ports. Close to return to the world.";
+                        " ports. Publish when ready.";
                 }
                 catch (ArgumentException exception)
                 { packageError = exception.Message; }
             }
-            if (GUI.Button(new Rect(rect.x + 380f, rect.y + 643f,
-                180f, 35f), "Publish module"))
+            if (GUI.Button(new Rect(area.x + (area.width - buttonWidth) * 0.5f,
+                buttonY, buttonWidth, 50f), "Publish module", buttonStyle))
             {
                 try
                 {
@@ -1266,6 +1371,7 @@ namespace SiliconSandbox.Interaction
                         ? "Package storage is unavailable."
                         : publishPackage(packageDraft);
                     packageDraft = null;
+                    ClearSelection();
                     player.SetInterfaceOpen(false);
                 }
                 catch (Exception error) when (error is IOException ||
@@ -1273,12 +1379,63 @@ namespace SiliconSandbox.Interaction
                     error is UnauthorizedAccessException)
                 { packageError = error.Message; }
             }
-            if (GUI.Button(new Rect(rect.x + 740f, rect.y + 643f,
-                180f, 35f), "Close"))
+            if (GUI.Button(new Rect(area.xMax - buttonWidth - 24f, buttonY,
+                buttonWidth, 50f), "Close", buttonStyle))
             {
                 packageDraft = null;
                 packageError = "";
+                ClearSelection();
                 player.SetInterfaceOpen(false);
+            }
+        }
+
+        private int CountPortsOnFace(GridDirection face)
+        {
+            var count = 0;
+            foreach (var port in packageDraft.Ports)
+                if (PortFace(port.PointQ) == face) count++;
+            return count;
+        }
+
+        private void DrawPackageFace(GridDirection face, Rect card,
+            GUIStyle labelStyle, GUIStyle buttonStyle, GUIStyle fieldStyle)
+        {
+            GUI.Box(card, "");
+            GUI.Label(new Rect(card.x + 12f, card.y + 5f,
+                card.width - 24f, 42f), GridOrientation.FaceName(face),
+                labelStyle);
+            var row = 0;
+            for (var i = 0; i < packageDraft.Ports.Count; i++)
+            {
+                var choice = packageDraft.Ports[i];
+                if (PortFace(choice.PointQ) != face) continue;
+                var y = card.y + 54f + row++ * 72f;
+                var nameWidth = card.width * 0.26f;
+                var directionWidth = card.width * 0.16f;
+                var targetWidth = card.width * 0.17f;
+                var faceWidth = card.width * 0.22f;
+                var name = GUI.TextField(new Rect(card.x + 10f, y,
+                    nameWidth, 52f), choice.Name, fieldStyle);
+                if (name != choice.Name)
+                    packageDraft.ReplacePort(i, new OneBitPortChoice(name,
+                        choice.Direction, choice.LocalCell, choice.PointQ,
+                        choice.BitZeroTarget));
+                var directionX = card.x + 18f + nameWidth;
+                if (GUI.Button(new Rect(directionX, y, directionWidth, 52f),
+                    choice.Direction.ToString(), buttonStyle))
+                {
+                    var next = (OneBitPortDirection)
+                        (((int)choice.Direction + 1) % 3);
+                    packageDraft.ReplacePort(i, new OneBitPortChoice(name,
+                        next, choice.LocalCell, choice.PointQ,
+                        choice.BitZeroTarget));
+                }
+                var targetX = directionX + directionWidth + 8f;
+                GUI.Label(new Rect(targetX, y, targetWidth, 52f),
+                    EndpointName(choice.BitZeroTarget), labelStyle);
+                if (GUI.Button(new Rect(targetX + targetWidth + 8f, y,
+                    faceWidth, 52f), "Move face", buttonStyle))
+                    MovePortToNextFace(i);
             }
         }
 
@@ -1303,22 +1460,6 @@ namespace SiliconSandbox.Interaction
                 ? "wire" : "port";
         }
 
-        private void CyclePortMapping(int index)
-        {
-            var candidates = packageDraft.Snapshot.PortCandidates;
-            if (candidates.Count == 0) return;
-            var choice = packageDraft.Ports[index];
-            var found = -1;
-            for (var i = 0; i < candidates.Count; i++)
-                if (candidates[i].InternalEndpoint.Equals(choice.BitZeroTarget))
-                { found = i; break; }
-            var target = candidates[(found + 1) % candidates.Count];
-            packageDraft.ReplacePort(index, new OneBitPortChoice(choice.Name,
-                choice.Direction, choice.LocalCell, choice.PointQ,
-                target.InternalEndpoint));
-            packageError = "";
-        }
-
         private void MovePortToNextFace(int index)
         {
             var faces = new[] { GridDirection.West, GridDirection.East,
@@ -1327,7 +1468,7 @@ namespace SiliconSandbox.Interaction
             var choice = packageDraft.Ports[index];
             var current = PortFace(choice.PointQ);
             var start = Array.IndexOf(faces, current);
-            var size = packageDraft.Snapshot.SizeCells;
+            var size = packageDraft.ExteriorSizeCells;
             for (var step = 1; step < faces.Length; step++)
             {
                 var face = faces[(start + step) % faces.Length];
@@ -1410,38 +1551,45 @@ namespace SiliconSandbox.Interaction
         private void DrawPauseMenu()
         {
             var rect = new Rect(Screen.width * 0.5f - 190f,
-                Screen.height * 0.5f - 285f, 380f, 570f);
+                Screen.height * 0.5f - 310f, 380f, 620f);
             GUI.Box(rect, "Simulation paused");
-            GUI.Label(new Rect(rect.x + 20f, rect.y + 45f, 140f, 28f),
+            GUI.Label(new Rect(rect.x + 20f, rect.y + 45f, 105f, 24f),
+                "World name:");
+            worldNameText = GUI.TextField(new Rect(rect.x + 125f,
+                rect.y + 45f, 155f, 25f), worldNameText);
+            if (GUI.Button(new Rect(rect.x + 285f, rect.y + 45f, 70f, 25f),
+                "Apply"))
+                RunPersistence(() => renameWorld(worldNameText));
+            GUI.Label(new Rect(rect.x + 20f, rect.y + 95f, 140f, 28f),
                 "World clock Hz:");
             frequencyText = GUI.TextField(new Rect(rect.x + 165f,
-                rect.y + 45f, 180f, 26f), frequencyText);
-            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 85f, 155f, 32f),
+                rect.y + 95f, 180f, 26f), frequencyText);
+            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 135f, 155f, 32f),
                 "Apply frequency"))
                 TryEdit(() => session.Scheduler.SetFrequency(frequencyText));
-            if (GUI.Button(new Rect(rect.x + 195f, rect.y + 85f, 155f, 32f),
+            if (GUI.Button(new Rect(rect.x + 195f, rect.y + 135f, 155f, 32f),
                 "Reset Simulation"))
                 TryEdit(() =>
                 {
                     session.Scheduler.ResetSimulation();
                     session.Scheduler.PauseSimulation();
                 });
-            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 135f,
+            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 185f,
                 155f, 36f), "Step clock edge"))
                 TryEdit(() => session.Scheduler.StepClockEdge());
-            if (GUI.Button(new Rect(rect.x + 195f, rect.y + 135f,
+            if (GUI.Button(new Rect(rect.x + 195f, rect.y + 185f,
                 155f, 36f), "Step full cycle"))
                 TryEdit(() => session.Scheduler.StepClockCycle());
-            GUI.Label(new Rect(rect.x + 20f, rect.y + 184f, 340f, 28f),
+            GUI.Label(new Rect(rect.x + 20f, rect.y + 234f, 340f, 28f),
                 "Settled time " + session.Scheduler.Now +
                 "   CLK " + session.Scheduler.ClockLevel.ToSymbol());
-            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 222f, 155f, 34f),
+            if (GUI.Button(new Rect(rect.x + 20f, rect.y + 272f, 155f, 34f),
                 "Save World"))
                 RunPersistence(saveWorld);
-            if (GUI.Button(new Rect(rect.x + 195f, rect.y + 222f, 155f, 34f),
+            if (GUI.Button(new Rect(rect.x + 195f, rect.y + 272f, 155f, 34f),
                 "Reopen Saved"))
                 RunPersistence(reopenWorld);
-            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 266f, 170f, 32f),
+            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 316f, 170f, 32f),
                 "Browse saves/recovery"))
             {
                 try
@@ -1455,7 +1603,7 @@ namespace SiliconSandbox.Interaction
             }
             if (browseWorlds)
             {
-                var area = new Rect(rect.x + 20f, rect.y + 310f, 340f, 150f);
+                var area = new Rect(rect.x + 20f, rect.y + 360f, 340f, 150f);
                 var content = new Rect(0f, 0f, 315f,
                     Mathf.Max(150f, savedWorldChoices.Count * 34f));
                 savedWorldScroll = GUI.BeginScrollView(area, savedWorldScroll, content);
@@ -1476,9 +1624,9 @@ namespace SiliconSandbox.Interaction
                 }
                 GUI.EndScrollView();
             }
-            GUI.Label(new Rect(rect.x + 20f, rect.y + 470f, 340f, 42f),
+            GUI.Label(new Rect(rect.x + 20f, rect.y + 520f, 340f, 42f),
                 persistenceMessage);
-            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 515f, 170f, 40f),
+            if (GUI.Button(new Rect(rect.x + 105f, rect.y + 565f, 170f, 40f),
                 "Resume"))
             {
                 session.Scheduler.ResumeSimulation();
@@ -1528,12 +1676,14 @@ namespace SiliconSandbox.Interaction
             catch (KeyNotFoundException) { CloseInspection(); return; }
             var names = new List<string>();
             foreach (var pin in detail.ConnectedPins) names.Add(PinName(pin));
-            GUI.Box(new Rect(12f, 150f, 550f, 175f),
-                "Inspect one-bit net: " + detail.Value.ToSymbol() +
-                "   width 1   tag " + detail.Tag + "\n" +
-                "Connections: " + string.Join(", ", names) + "\n" +
-                "Active drivers: " + detail.ActiveDrivers.Count + "\n" +
-                detail.Explanation);
+            DrawInspectionPanel("Inspect one-bit net: " +
+                detail.Value.ToSymbol(), new[]
+                {
+                    "Width 1   Tag " + detail.Tag,
+                    "Connections: " + string.Join(", ", names),
+                    "Active drivers: " + detail.ActiveDrivers.Count,
+                    detail.Explanation
+                });
         }
 
         private void DrawComponentInspect()
@@ -1542,16 +1692,9 @@ namespace SiliconSandbox.Interaction
             foreach (var item in session.Design.Components)
                 if (item.Id == inspectedOwner) { component = item; break; }
             if (component == null) { CloseInspection(); return; }
-            var area = new Rect(12f, 150f, 550f, 305f);
-            GUI.Box(area, "Inspect " + component.TypeId + "  width 1");
             var names = component.PinIds.Keys.ToList();
             names.Sort(StringComparer.Ordinal);
-            var scrollArea = new Rect(area.x + 12f, area.y + 32f,
-                area.width - 24f, area.height - 44f);
-            var content = new Rect(0f, 0f, scrollArea.width - 20f,
-                Mathf.Max(scrollArea.height, names.Count * 66f));
-            internalInspectScroll = GUI.BeginScrollView(scrollArea,
-                internalInspectScroll, content);
+            var rows = new List<string>();
             for (var i = 0; i < names.Count; i++)
             {
                 var name = names[i];
@@ -1560,12 +1703,13 @@ namespace SiliconSandbox.Interaction
                 var connections = new List<string>();
                 foreach (var pin in detail.ConnectedPins)
                     connections.Add(PinName(pin));
-                GUI.Label(new Rect(0f, i * 66f, content.width, 64f),
+                rows.Add(
                     name + "=" + detail.Value.ToSymbol() + "  drivers " +
                     detail.ActiveDrivers.Count + "  " + detail.Explanation +
                     "\nConnected: " + string.Join(", ", connections));
             }
-            GUI.EndScrollView();
+            DrawInspectionPanel("Inspect " + component.TypeId + "  width 1",
+                rows);
         }
 
         private void DrawModuleInternalInspect()
@@ -1574,16 +1718,14 @@ namespace SiliconSandbox.Interaction
             foreach (var item in session.Design.Modules)
                 if (item.Id == inspectedOwner) { instance = item; break; }
             if (instance == null) { CloseInspection(); return; }
-            var area = new Rect(12f, 150f, 550f, 305f);
             if (!session.ModuleVersions.TryGetValue(instance.VersionId,
                 out var version))
             {
-                GUI.Box(area, instance.InstanceName + " — exact module missing\n" +
-                    "Exterior ports and connections remain as a placeholder.");
+                DrawInspectionPanel(instance.InstanceName +
+                    " — exact module missing", new[]
+                    { "Exterior ports and connections remain as a placeholder." });
                 return;
             }
-            GUI.Box(area, "Inside " + instance.InstanceName + "  version " +
-                instance.VersionId.ToString("D").Substring(0, 8));
             var lines = new List<string>();
             foreach (var component in version.Components)
             {
@@ -1597,14 +1739,57 @@ namespace SiliconSandbox.Interaction
                     "," + component.AnchorCell.Z + ")  " +
                     string.Join("  ", pins));
             }
-            var scrollArea = new Rect(area.x + 12f, area.y + 32f,
-                area.width - 24f, area.height - 44f);
-            var content = new Rect(0f, 0f, scrollArea.width - 20f,
-                Mathf.Max(scrollArea.height, lines.Count * 28f));
+            DrawInspectionPanel("Inside " + instance.InstanceName +
+                "  version " + instance.VersionId.ToString("D").Substring(0, 8),
+                lines);
+        }
+
+        private void DrawInspectionPanel(string title,
+            IReadOnlyList<string> rows)
+        {
+            var area = new Rect(Screen.width * 0.04f, Screen.height * 0.06f,
+                Screen.width * 0.92f, Screen.height * 0.88f);
+            var previousColor = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.86f);
+            GUI.DrawTexture(area, Texture2D.whiteTexture);
+            GUI.color = previousColor;
+            var fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height *
+                (48f / 1080f)), 32, 56);
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = fontSize,
+                wordWrap = true,
+                alignment = TextAnchor.UpperLeft
+            };
+            style.normal.textColor = Color.white;
+            var margin = Mathf.Max(25f, fontSize * 0.7f);
+            var contentWidth = area.width - margin * 2f - 24f;
+            var titleHeight = style.CalcHeight(new GUIContent(title), contentWidth);
+            GUI.Label(new Rect(area.x + margin, area.y + margin,
+                contentWidth, titleHeight), title, style);
+            var scrollArea = new Rect(area.x + margin,
+                area.y + margin + titleHeight + 14f,
+                area.width - margin * 2f,
+                area.height - margin * 2f - titleHeight - 14f);
+            var heights = new List<float>();
+            var contentHeight = 0f;
+            foreach (var row in rows)
+            {
+                var height = style.CalcHeight(new GUIContent(row), contentWidth);
+                heights.Add(height);
+                contentHeight += height + fontSize * 0.4f;
+            }
+            var content = new Rect(0f, 0f, contentWidth,
+                Mathf.Max(scrollArea.height, contentHeight));
             internalInspectScroll = GUI.BeginScrollView(scrollArea,
                 internalInspectScroll, content);
-            for (var i = 0; i < lines.Count; i++)
-                GUI.Label(new Rect(0f, i * 28f, content.width, 26f), lines[i]);
+            var y = 0f;
+            for (var i = 0; i < rows.Count; i++)
+            {
+                GUI.Label(new Rect(0f, y, contentWidth, heights[i]),
+                    rows[i], style);
+                y += heights[i] + fontSize * 0.4f;
+            }
             GUI.EndScrollView();
         }
 

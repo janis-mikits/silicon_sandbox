@@ -24,7 +24,7 @@ namespace SiliconSandbox.Bootstrap
             "SILICON_SANDBOX_BENCHMARK_NATIVE_DIAGNOSTIC";
         private const double WarmupSeconds = 10d;
         private const double MeasureSeconds = 60d;
-        private const string ReferenceName = "first-playable-1000-gates";
+        private const string ReferenceName = "first-playable-1000-gates-compact-v1";
         private PlayableWorldBootstrap bootstrap;
         private string outputPath;
         private OneBitWorldSession session;

@@ -10,6 +10,22 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class OneBitWorldContextTests
     {
         [Test]
+        public void RenameKeepsWorldIdentityAndPersistsDisplayedName()
+        {
+            var context = OneBitWorldContext.NewFreeplay("New World",
+                new WorldBounds(10, 10, 4));
+            var identity = context.WorldId;
+            context.RenameWorld("  Professor circuit  ");
+            var saved = context.Capture(new SavedPlayerPose(2, 2, 2, 0, 0, 1));
+            Assert.That(saved.WorldName, Is.EqualTo("Professor circuit"));
+            Assert.That(OneBitWorldContext.Open(saved).WorldName,
+                Is.EqualTo("Professor circuit"));
+            Assert.That(context.WorldId, Is.EqualTo(identity));
+            Assert.Throws<System.ArgumentException>(() => context.RenameWorld("  "));
+            Assert.That(context.WorldName, Is.EqualTo("Professor circuit"));
+        }
+
+        [Test]
         public void AuthoredSnapshotRetainsWorldAndInventoryButRestartsLiveState()
         {
             var context = OneBitWorldContext.NewFreeplay("Professor demo",

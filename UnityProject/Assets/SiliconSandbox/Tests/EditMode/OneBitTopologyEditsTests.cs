@@ -10,6 +10,68 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class OneBitTopologyEditsTests
     {
         [Test]
+        public void BreakingLastVisibleWireSpanFreesItsPinForReconnection()
+        {
+            var bounds = new WorldBounds(20, 20, 10);
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(bounds));
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(3, 1, 3), GridOrientation.Default);
+            var source = session.Design.Components[0];
+            var pin = JoinMember.ComponentPin(source.Id, source.PinIds["OUT"]);
+            session.PlaceWireStub(pin, new GridCell(5, 1, 3));
+            Assert.That(session.Design.Topology.Joins.Count, Is.EqualTo(1));
+            while (true)
+            {
+                ConnectorRoute route = null;
+                foreach (var candidate in session.Design.Topology.Connectors)
+                    if (candidate.Spans.Count > 0) { route = candidate; break; }
+                if (route == null) break;
+                session.BreakSpan(route.Id, route.Spans[0].Id);
+            }
+            foreach (var join in session.Design.Topology.Joins)
+                foreach (var member in join.Members)
+                    Assert.That(member, Is.Not.EqualTo(pin),
+                        "A broken wire must not leave an invisible pin stub.");
+            session.PlaceWireStub(pin, new GridCell(5, 1, 4));
+            Assert.That(session.Design.Topology.Joins.Count, Is.EqualTo(1));
+            Assert.That(session.Design.Topology.Connectors.Count,
+                Is.GreaterThanOrEqualTo(1));
+        }
+
+        [Test]
+        public void BreakingSpanRetainsOneNodeBridgeToAnotherVisibleConnector()
+        {
+            var cell = new GridCell(2, 1, 2);
+            var point = new QuarterPoint(0, 1, 1);
+            var pin = new AuthoredPin(Guid.NewGuid(), Guid.NewGuid(), cell, point);
+            var aStart = new RouteNode(Guid.NewGuid(), cell, 0, point);
+            var aEnd = new RouteNode(Guid.NewGuid(), cell, 0,
+                new QuarterPoint(4, 1, 1));
+            var spanA = new RouteSpan(Guid.NewGuid(), aStart.Id, aEnd.Id);
+            var routeA = new ConnectorRoute(Guid.NewGuid(), "wire", 1,
+                new[] { aStart, aEnd }, new[] { spanA });
+            var bStart = new RouteNode(Guid.NewGuid(), cell, 1, point);
+            var bEnd = new RouteNode(Guid.NewGuid(), cell, 1,
+                new QuarterPoint(4, 3, 1));
+            var routeB = new ConnectorRoute(Guid.NewGuid(), "wire", 1,
+                new[] { bStart, bEnd }, new[]
+                { new RouteSpan(Guid.NewGuid(), bStart.Id, bEnd.Id) });
+            var pinRef = JoinMember.ComponentPin(pin.ObjectId, pin.PinId);
+            var aRef = JoinMember.ConnectorNode(routeA.Id, aStart.Id);
+            var bRef = JoinMember.ConnectorNode(routeB.Id, bStart.Id);
+            var original = new OneBitAuthoredTopology(new[] { pin },
+                new[] { routeA, routeB }, new[]
+                {
+                    new ElectricalJoin(Guid.NewGuid(), new[] { pinRef, aRef }),
+                    new ElectricalJoin(Guid.NewGuid(), new[] { aRef, bRef })
+                });
+            var result = OneBitTopologyEdits.BreakSpan(original, routeA.Id,
+                spanA.Id);
+            Assert.That(result.Graph.Connected(pinRef, bRef), Is.True);
+            Assert.That(result.Design.Joins.Count, Is.EqualTo(2));
+        }
+
+        [Test]
         public void BreakingBoundarySpanRetiresRouteAndPreservesSurvivingPartsAndUnrelatedNet()
         {
             var west = new RouteNode(Guid.NewGuid(), new GridCell(1, 1, 1), 0,

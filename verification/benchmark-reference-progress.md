@@ -1,6 +1,6 @@
 # Saved performance reference and Mac measurement status
 
-The committed benchmark input is `UnityProject/Assets/StreamingAssets/Benchmarks/first-playable-1000-gates.ssworld`, SHA-256 `ccbfc944c7ef245141d13a6b1183c0cb7785f34088694ea114414e5454e26967`. It has 500 standalone one-bit AND gates and ten instances of the same immutable 50-AND version, for exactly 1,000 equivalent operations. An independent Edit Mode assertion checks the literal file hash and gate distribution. The player benchmark now reads and validates this saved archive rather than generating a fresh in-memory fixture.
+The current benchmark input is `UnityProject/Assets/StreamingAssets/Benchmarks/first-playable-1000-gates-compact-v1.ssworld`, SHA-256 `016e9cff9773be7cb0b931a7d7492b8a9ec856b79418e445a39ec0acf1c95c3c`. It has 500 standalone one-bit AND gates and ten instances of the same immutable 50-AND version, for exactly 1,000 equivalent operations. An independent Edit Mode assertion checks the literal file hash and gate distribution. The player benchmark reads and validates this saved archive rather than generating a fresh in-memory fixture. The original `first-playable-1000-gates.ssworld`, SHA-256 `ccbfc944c7ef245141d13a6b1183c0cb7785f34088694ea114414e5454e26967`, is retained for historical comparison; its pre-release module record lacks the now-required compact exterior size. Measurements below dated 5 October and the earlier 6 October run used that old archive.
 
 Native verification command:
 
@@ -104,3 +104,44 @@ The Unity gate passed **193 Edit Mode tests, 17 Play Mode tests, Mac build, play
 | Dense diagnostic, opaque AND bodies | 234.091 | 4.807 | 4,534 | 4.271 / 3.282 |
 
 Both active reference cases processed all 1,200 expected edges. Eight x=16/x=32 boundary operations took 21–52 ms; manual save took 176 ms and load through first frame 306 ms. Dense diagnostic used 5,005 total renderer objects and reached 222 MiB reserved memory, compared with 7,077 renderers in the mixed reference. The shapes differ in visible-object count and circuit structure, so these are observed view costs, not per-object speed claims. Mac numerical first-playable acceptance passes; graphical readability, the manual professor walkthrough, Windows, and CI remain separate unverified checks.
+
+## Compact-V1 frozen reference Mac run, 6 October 2026
+
+The approved pre-release V1 correction added a separate module exterior footprint. The old benchmark archive remains in the repository for historical comparison; the active benchmark uses the newly frozen `first-playable-1000-gates-compact-v1.ssworld`, SHA-256 `016e9cff9773be7cb0b931a7d7492b8a9ec856b79418e445a39ec0acf1c95c3c`. Its Edit Mode test verifies the exact hash, 500 standalone gates, ten 50-gate module instances, all definitions available, and the same 1,011 connector routes and 1,013 visible spans. The module record has the required `exteriorSizeCells`. The dense diagnostic archive and hash are unchanged.
+
+Commands:
+
+```sh
+scripts/verify-unity.sh --editor '/Applications/Unity/Hub/Editor/6000.3.24f1/Unity.app/Contents/MacOS/Unity' --target StandaloneOSX
+scripts/benchmark-mac.sh
+```
+
+The Unity gate passed **200 Edit Mode and 17 Play Mode tests, macOS build, player startup, save/reopen, and exit-autosave** when the benchmark was run. A subsequent rerun after adding two direct break-operation tests passed **202 Edit Mode and 17 Play Mode tests**, with the same build/player checks. The graphical benchmark printed `Strict Mac numerical frame, shape, clock, edit, save and load gates passed.` Its ignored raw report is `UnityProject/Logs/Verification/benchmark-mac-reference-20261006T215207Z.txt`. Hardware was Apple M4 on macOS 26.6.2; every case used 1920 × 1080 Standard, VSync off, and 100% built-in render scale. The four primary cases each warmed for ten seconds and measured at least 60 seconds.
+
+| View | Average FPS | p99 ms | Processed clock edges |
+| --- | ---: | ---: | ---: |
+| Idle/stationary | 222.511 | 7.315 | 0 |
+| Active/stationary | 184.052 | 8.700 | 1,200 |
+| Idle/flying | 505.464 | 6.592 | 0 |
+| Active/flying | 544.013 | 7.702 | 1,200 |
+| Sparse standalone gates | 248.781 | 5.864 | 0 |
+| Repeated module bodies | 772.339 | 6.211 | 0 |
+| Dense opaque diagnostic | 219.280 | 6.928 | 0 |
+
+Eight place/break/undo operations across x=16 and x=32 region lines took 20.546–46.240 ms. Manual save took 169.847 ms and load through first rendered frame 298.645 ms. The maximum single idle/stationary frame was 568.746 ms even though its p99 was 7.315 ms; the strict protocol gates on average FPS and p99, so this isolated outlier remains visible for follow-up rather than being called a clean maximum. The two active cases processed the complete 1,200-edge schedule. This is a numerical Mac pass for the revised archive, not a manual readability pass, Windows result, or executed CI job.
+
+## Final topology-fix Mac rerun, 6 October 2026
+
+After the additional connector-bridge fix, the exact commands above passed **203 Edit Mode tests, 17 Play Mode tests, macOS build, player startup, save/reopen, and exit-autosave**, followed by another strict graphical benchmark pass. The final ignored report is `UnityProject/Logs/Verification/benchmark-mac-reference-20261006T220223Z.txt`. It used the same compact-V1 reference hash `016e9cff9773be7cb0b931a7d7492b8a9ec856b79418e445a39ec0acf1c95c3c`, dense diagnostic hash `9dfc121962af93d0151c09203b82bb2dc2d4275b72145aeba2d505f7dbef9242`, machine, resolution, Standard preset, render scale and time windows.
+
+| View | Average FPS | p99 ms | Clock edges |
+| --- | ---: | ---: | ---: |
+| Idle/stationary | 225.964 | 7.269 | 0 |
+| Active/stationary | 193.216 | 7.862 | 1,200 |
+| Idle/flying | 412.587 | 6.329 | 0 |
+| Active/flying | 455.882 | 7.353 | 1,200 |
+| Sparse standalone gates | 291.712 | 6.075 | 0 |
+| Repeated module bodies | 1,027.842 | 4.992 | 0 |
+| Dense opaque diagnostic | 215.525 | 7.204 | 0 |
+
+The eight region-boundary edit latencies were 20.944–49.795 ms, manual save 175.634 ms, and load through first rendered frame 308.778 ms. The idle/stationary run again had one long maximum frame, 559.757 ms, although p99 was 7.269 ms. The strict protocol passes numerically on this Mac; the one-frame hitch is a recorded investigation item. Manual visual acceptance, Windows checks under the user's temporary waiver, and an executed CI job remain unverified.

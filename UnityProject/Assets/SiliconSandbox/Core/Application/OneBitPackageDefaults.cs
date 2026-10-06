@@ -5,7 +5,8 @@ using SiliconSandbox.Graph;
 
 namespace SiliconSandbox.Application
 {
-    // Editable starting layout for the first-playable one-cell package screen.
+    // Editable starting layout. Captured internal bounds do not determine the
+    // placed exterior footprint; port capacity does.
     // The confirmed interface is still the player's final port choices.
     public static class OneBitPackageDefaults
     {
@@ -24,18 +25,11 @@ namespace SiliconSandbox.Application
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var graph = OneBitTopologyGraphBuilder.Build(snapshot.Topology);
-            var selected = new List<OneBitPortCandidate>();
-            var representedNets = new HashSet<DerivedOneBitNet>();
-            foreach (var candidate in snapshot.PortCandidates)
-                if (candidate.InternalEndpoint.Kind == JoinTargetKind.ComponentPin)
-                {
-                    selected.Add(candidate);
-                    representedNets.Add(graph.NetFor(candidate.InternalEndpoint));
-                }
-            foreach (var candidate in snapshot.PortCandidates)
-                if (candidate.InternalEndpoint.Kind == JoinTargetKind.ConnectorNode &&
-                    representedNets.Add(graph.NetFor(candidate.InternalEndpoint)))
-                    selected.Add(candidate);
+            // Every connected boundary candidate receives an exterior port.
+            // The snapshot already excludes pure pass-through routes; a
+            // duplicate net is not a reason to silently omit a real port.
+            var selected = new List<OneBitPortCandidate>(snapshot.PortCandidates);
+            var exteriorSize = DefaultExteriorSize(snapshot);
 
             var output = new List<OneBitPortChoice>();
             var usedNames = new HashSet<string>(StringComparer.Ordinal);
@@ -65,17 +59,16 @@ namespace SiliconSandbox.Application
                 for (var suffix = 2; !usedNames.Add(name); suffix++)
                     name = baseName + "_" + suffix;
                 var slot = direction == OneBitPortDirection.Output ? east++ : west++;
-                var capacity = checked(4 * snapshot.SizeCells.Y *
-                    snapshot.SizeCells.Z);
+                var capacity = checked(4 * exteriorSize.Y * exteriorSize.Z);
                 if (slot >= capacity)
                     throw new NotSupportedException(
                         "This selection needs a larger configured module face.");
                 var faceCell = slot / 4;
                 var localCell = new GridCell(
                     direction == OneBitPortDirection.Output
-                        ? snapshot.SizeCells.X - 1 : 0,
-                    faceCell / snapshot.SizeCells.Z,
-                    faceCell % snapshot.SizeCells.Z);
+                        ? exteriorSize.X - 1 : 0,
+                    faceCell / exteriorSize.Z,
+                    faceCell % exteriorSize.Z);
                 var point = direction == OneBitPortDirection.Output
                     ? new QuarterPoint(4, slot % 2 == 0 ? 1 : 3,
                         slot % 4 < 2 ? 1 : 3)
@@ -86,6 +79,34 @@ namespace SiliconSandbox.Application
                     candidate.InternalEndpoint));
             }
             return output.AsReadOnly();
+        }
+
+        public static GridCell DefaultExteriorSize(OneBitModuleSnapshot snapshot)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            var graph = OneBitTopologyGraphBuilder.Build(snapshot.Topology);
+            var inputCount = 0;
+            var outputCount = 0;
+            foreach (var candidate in snapshot.PortCandidates)
+            {
+                var pinRef = candidate.InternalEndpoint;
+                if (pinRef.Kind != JoinTargetKind.ComponentPin)
+                    foreach (var member in graph.NetFor(pinRef).Members)
+                        if (member.Kind == JoinTargetKind.ComponentPin)
+                        { pinRef = member; break; }
+                var output = false;
+                if (pinRef.Kind == JoinTargetKind.ComponentPin)
+                    foreach (var component in snapshot.Components)
+                        if (component.Id == pinRef.OwnerId)
+                            foreach (var pin in BuiltInPinCatalog.Pins(component.TypeId,
+                                component.TypeVersion))
+                                if (component.PinIds[pin.Key] == pinRef.PartId)
+                                    output = pin.Direction == PinDirection.Output;
+                if (output) outputCount++; else inputCount++;
+            }
+            var length = Math.Max(1,
+                (Math.Max(inputCount, outputCount) + 3) / 4);
+            return new GridCell(1, 1, length);
         }
     }
 }

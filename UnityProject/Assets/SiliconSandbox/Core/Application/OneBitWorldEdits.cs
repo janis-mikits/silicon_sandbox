@@ -60,6 +60,99 @@ namespace SiliconSandbox.Application
             return candidate;
         }
 
+        public static OneBitWorldDesign BreakComponent(OneBitWorldDesign original,
+            Guid objectId)
+        {
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            var components = new List<PlacedOneBitComponent>();
+            var found = false;
+            foreach (var component in original.Components)
+                if (component.Id == objectId) found = true;
+                else components.Add(component);
+            if (!found) throw new ArgumentException("Unknown component identity.");
+            var pins = new List<AuthoredPin>();
+            foreach (var pin in original.Topology.Pins)
+                if (pin.ObjectId != objectId) pins.Add(pin);
+            return WithoutRemovedEndpoint(original, components, original.Modules,
+                pins, original.Topology.ModulePorts,
+                member => member.Kind == JoinTargetKind.ComponentPin &&
+                    member.OwnerId == objectId);
+        }
+
+        public static OneBitWorldDesign BreakModule(OneBitWorldDesign original,
+            Guid objectId)
+        {
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            var modules = new List<PlacedOneBitModuleInstance>();
+            var found = false;
+            foreach (var module in original.Modules)
+                if (module.Id == objectId) found = true;
+                else modules.Add(module);
+            if (!found) throw new ArgumentException("Unknown module identity.");
+            var ports = new List<AuthoredModulePortBit>();
+            foreach (var port in original.Topology.ModulePorts)
+                if (port.ObjectId != objectId) ports.Add(port);
+            return WithoutRemovedEndpoint(original, original.Components, modules,
+                original.Topology.Pins, ports,
+                member => member.Kind == JoinTargetKind.ModulePortBit &&
+                    member.OwnerId == objectId);
+        }
+
+        public static OneBitWorldDesign BreakConnector(OneBitWorldDesign original,
+            Guid connectorId)
+        {
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            var routes = new List<ConnectorRoute>();
+            var found = false;
+            foreach (var route in original.Topology.Connectors)
+                if (route.Id == connectorId) found = true;
+                else routes.Add(route);
+            if (!found) throw new ArgumentException("Unknown connector identity.");
+            var joins = FilterJoins(original.Topology.Joins,
+                member => member.Kind == JoinTargetKind.ConnectorNode &&
+                    member.OwnerId == connectorId);
+            var topology = new OneBitAuthoredTopology(original.Topology.Pins,
+                routes, joins, original.Topology.ModulePorts);
+            var candidate = new OneBitWorldDesign(original.Bounds,
+                original.Components, topology, original.Modules);
+            OneBitTopologyGraphBuilder.Build(candidate.Topology);
+            return candidate;
+        }
+
+        private static OneBitWorldDesign WithoutRemovedEndpoint(
+            OneBitWorldDesign original,
+            IEnumerable<PlacedOneBitComponent> components,
+            IEnumerable<PlacedOneBitModuleInstance> modules,
+            IEnumerable<AuthoredPin> pins,
+            IEnumerable<AuthoredModulePortBit> ports,
+            Func<JoinMember, bool> removed)
+        {
+            var joins = FilterJoins(original.Topology.Joins, removed);
+            var topology = new OneBitAuthoredTopology(pins,
+                original.Topology.Connectors, joins, ports);
+            var candidate = new OneBitWorldDesign(original.Bounds,
+                components, topology, modules);
+            OneBitTopologyGraphBuilder.Build(candidate.Topology);
+            return candidate;
+        }
+
+        private static List<ElectricalJoin> FilterJoins(
+            IEnumerable<ElectricalJoin> source,
+            Func<JoinMember, bool> removed)
+        {
+            var joins = new List<ElectricalJoin>();
+            foreach (var join in source)
+            {
+                var members = new List<JoinMember>();
+                foreach (var member in join.Members)
+                    if (!removed(member)) members.Add(member);
+                if (members.Count >= 2)
+                    joins.Add(members.Count == join.Members.Count ? join :
+                        new ElectricalJoin(join.Id, members));
+            }
+            return joins;
+        }
+
         public static OneBitWorldDesign PlaceModule(OneBitWorldDesign original,
             OneBitModuleVersion version, string instanceName,
             GridCell anchorCell, GridOrientation orientation,
@@ -73,7 +166,7 @@ namespace SiliconSandbox.Application
                     port.Direction, port.LocalCell, port.PointQ));
             var placed = new PlacedOneBitModuleInstance(Guid.NewGuid(),
                 Guid.NewGuid(), version.FamilyId, version.VersionId,
-                instanceName, anchorCell, orientation, version.SizeCells,
+                instanceName, anchorCell, orientation, version.ExteriorSizeCells,
                 interfacePorts, tag);
             var modules = new List<PlacedOneBitModuleInstance>(original.Modules)
             { placed };
@@ -117,17 +210,36 @@ namespace SiliconSandbox.Application
             OneBitWorldDesign original, Guid srObjectId)
         {
             if (original == null) throw new ArgumentNullException(nameof(original));
-            PlacedOneBitComponent sr = null;
             foreach (var component in original.Components)
-                if (component.Id == srObjectId) { sr = component; break; }
-            if (sr == null || sr.TypeId != BuiltInPinCatalog.SrFlipFlop)
-                throw new ArgumentException("World-clock stub requires an SR CLK pin.");
-            var clockPinRef = JoinMember.ComponentPin(sr.Id, sr.PinIds["CLK"]);
+                if (component.Id == srObjectId &&
+                    component.TypeId == BuiltInPinCatalog.SrFlipFlop)
+                    return AttachWorldClockPin(original, srObjectId,
+                        component.PinIds["CLK"]);
+            throw new ArgumentException("World-clock target is not an SR CLK pin.");
+        }
+
+        public static OneBitWorldDesign AttachWorldClockPin(
+            OneBitWorldDesign original, Guid objectId, Guid pinId)
+        {
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            PlacedOneBitComponent target = null;
+            foreach (var component in original.Components)
+                if (component.Id == objectId) { target = component; break; }
+            if (target == null) throw new ArgumentException("Unknown component.");
+            var isInput = false;
+            foreach (var geometry in BuiltInPinCatalog.Pins(target.TypeId,
+                target.TypeVersion))
+                if (target.PinIds[geometry.Key] == pinId &&
+                    geometry.Direction == PinDirection.Input)
+                    isInput = true;
+            if (!isInput)
+                throw new ArgumentException("World clock requires an input pin.");
+            var clockPinRef = JoinMember.ComponentPin(target.Id, pinId);
             AuthoredPin clockPin = null;
             foreach (var pin in original.Topology.Pins)
-                if (pin.ObjectId == sr.Id && pin.PinId == sr.PinIds["CLK"])
+                if (pin.ObjectId == target.Id && pin.PinId == pinId)
                 { clockPin = pin; break; }
-            if (clockPin == null) throw new ArgumentException("SR CLK pin is missing.");
+            if (clockPin == null) throw new ArgumentException("Input pin is missing.");
             return AttachWorldClockEndpoint(original, clockPinRef, clockPin);
         }
 
@@ -142,9 +254,8 @@ namespace SiliconSandbox.Application
             OneBitPortInterface clock = null;
             foreach (var item in module.InterfacePorts)
                 if (item.Id == portId) { clock = item; break; }
-            if (clock == null || clock.Name != "CLK" ||
-                clock.Direction == OneBitPortDirection.Output)
-                throw new ArgumentException("World clock requires an input CLK port.");
+            if (clock == null || clock.Direction == OneBitPortDirection.Output)
+                throw new ArgumentException("World clock requires an input or inout port.");
             var endpoint = JoinMember.ModulePortBit(module.Id, portId, 0);
             foreach (var port in original.Topology.ModulePorts)
                 if (port.ObjectId == module.Id && port.PortId == portId)
@@ -160,7 +271,7 @@ namespace SiliconSandbox.Application
             foreach (var join in original.Topology.Joins)
                 foreach (var member in join.Members)
                     if (member.Equals(endpoint))
-                        throw new ArgumentException("The CLK port already has a connector.");
+                        throw new ArgumentException("The target pin already has a connector.");
 
             var outside = AdjacentCell(clockPin);
             var useOutside = original.Bounds.ContainsPlaceable(outside);

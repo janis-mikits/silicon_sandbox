@@ -25,7 +25,7 @@ namespace SiliconSandbox.Tests.EditMode
         }
 
         [Test]
-        public void SrDraftCanExposeOnlyApprovedFourDemonstrationPorts()
+        public void SrDraftKeepsEveryConnectedPortIncludingUnwiredQBar()
         {
             var world = OneBitWorldEdits.PlaceComponent(OneBitWorldDesign.Empty(
                 new WorldBounds(8, 8, 4)), BuiltInPinCatalog.SrFlipFlop,
@@ -34,17 +34,20 @@ namespace SiliconSandbox.Tests.EditMode
             var draft = new OneBitPackageDraft(world,
                 new CellRegion(original.AnchorCell, original.AnchorCell), "SR demo");
             Assert.That(draft.Ports.Count, Is.EqualTo(5));
-            var qbar = -1;
-            for (var i = 0; i < draft.Ports.Count; i++)
-                if (draft.Ports[i].Name == "Q_bar") qbar = i;
-            Assert.That(qbar, Is.GreaterThanOrEqualTo(0));
-            draft.RemovePort(qbar);
+            var input = draft.Ports[0];
+            Assert.Throws<ArgumentException>(() => draft.ReplacePort(0,
+                new OneBitPortChoice(input.Name, input.Direction,
+                    input.LocalCell, input.PointQ,
+                    draft.Ports[1].BitZeroTarget)));
+            Assert.That(draft.Ports[0].BitZeroTarget,
+                Is.EqualTo(input.BitZeroTarget));
             var version = draft.BuildCandidate(Guid.NewGuid());
-            Assert.That(version.Ports.Count, Is.EqualTo(4));
+            Assert.That(version.Ports.Count, Is.EqualTo(5));
             Assert.That(version.Ports[0].Name, Is.EqualTo("S"));
             Assert.That(version.Ports[1].Name, Is.EqualTo("R"));
             Assert.That(version.Ports[2].Name, Is.EqualTo("CLK"));
             Assert.That(version.Ports[3].Name, Is.EqualTo("Q"));
+            Assert.That(version.Ports[4].Name, Is.EqualTo("Q_bar"));
             Assert.That(version.Ports[0].Direction,
                 Is.EqualTo(OneBitPortDirection.Input));
             Assert.That(version.Ports[3].Direction,
@@ -76,7 +79,7 @@ namespace SiliconSandbox.Tests.EditMode
         }
 
         [Test]
-        public void MultiCellDraftOffersExactExteriorPortsOnItsSavedFootprint()
+        public void MultiCellDraftPreservesInternalLayoutButCompactsExteriorToPortCapacity()
         {
             var world = OneBitWorldEdits.PlaceComponent(OneBitWorldDesign.Empty(
                 new WorldBounds(8, 8, 4)), BuiltInPinCatalog.SrFlipFlop,
@@ -88,11 +91,30 @@ namespace SiliconSandbox.Tests.EditMode
                     new GridCell(3, 1, 2)), "two cells");
             var version = draft.BuildCandidate(Guid.NewGuid());
             Assert.That(version.SizeCells, Is.EqualTo(new GridCell(2, 1, 1)));
+            Assert.That(version.ExteriorSizeCells, Is.EqualTo(new GridCell(1, 1, 1)));
             Assert.That(version.Components.Count, Is.EqualTo(2));
             foreach (var port in version.Ports)
-                Assert.That(port.LocalCell.X,
-                    Is.EqualTo(port.Direction == OneBitPortDirection.Output
-                        ? 1 : 0));
+                Assert.That(port.LocalCell.X, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ThreeByTwoCaptureOfOneSrPlacesAsOneExteriorCell()
+        {
+            var world = OneBitWorldEdits.PlaceComponent(OneBitWorldDesign.Empty(
+                new WorldBounds(12, 12, 4)), BuiltInPinCatalog.SrFlipFlop,
+                new GridCell(2, 1, 2), GridOrientation.Default);
+            var draft = new OneBitPackageDraft(world,
+                new CellRegion(new GridCell(2, 1, 2),
+                    new GridCell(4, 1, 3)), "SR compact");
+            var version = draft.BuildCandidate(Guid.NewGuid());
+            Assert.That(version.SizeCells, Is.EqualTo(new GridCell(3, 1, 2)));
+            Assert.That(version.ExteriorSizeCells,
+                Is.EqualTo(new GridCell(1, 1, 1)));
+            Assert.That(version.Ports.Count, Is.EqualTo(3));
+            var placed = OneBitWorldEdits.PlaceModule(world, version, "SR copy",
+                new GridCell(8, 1, 8), GridOrientation.Default);
+            Assert.That(placed.Modules[0].OccupiedCells(),
+                Is.EquivalentTo(new[] { new GridCell(8, 1, 8) }));
         }
     }
 }

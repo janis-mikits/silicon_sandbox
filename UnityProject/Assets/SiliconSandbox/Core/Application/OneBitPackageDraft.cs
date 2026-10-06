@@ -13,6 +13,7 @@ namespace SiliconSandbox.Application
         public CellRegion Region { get; }
         public ulong BaseRevision { get; }
         public OneBitModuleSnapshot Snapshot { get; }
+        public GridCell ExteriorSizeCells { get; }
         public string Name { get; set; }
         public IReadOnlyList<OneBitPortChoice> Ports => ports.AsReadOnly();
 
@@ -22,6 +23,7 @@ namespace SiliconSandbox.Application
             Region = region;
             BaseRevision = baseRevision;
             Snapshot = OneBitModuleSnapshotBuilder.Preview(world, region);
+            ExteriorSizeCells = OneBitPackageDefaults.DefaultExteriorSize(Snapshot);
             ports = new List<OneBitPortChoice>(
                 OneBitPackageDefaults.ForSelection(Snapshot));
             Name = proposedName;
@@ -30,17 +32,18 @@ namespace SiliconSandbox.Application
         public void ReplacePort(int index, OneBitPortChoice choice)
         {
             if (choice == null) throw new ArgumentNullException(nameof(choice));
+            if (!ports[index].BitZeroTarget.Equals(choice.BitZeroTarget))
+                throw new ArgumentException(
+                    "A captured port cannot be remapped to another internal connection.");
             ports[index] = choice;
         }
-
-        public void RemovePort(int index) => ports.RemoveAt(index);
 
         public OneBitModuleVersion BuildCandidate(Guid familyId)
         {
             // A caller may validate freely. This does not publish to a world,
             // library index, inventory, or live simulator.
-            return OneBitModuleVersionFactory.Create(Snapshot, familyId,
-                Name, ports);
+            return OneBitModuleVersionFactory.Create(Snapshot,
+                ExteriorSizeCells, familyId, Name, ports);
         }
     }
 }

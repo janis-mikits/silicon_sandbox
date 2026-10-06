@@ -8,6 +8,31 @@ namespace SiliconSandbox.Tests.EditMode
     public sealed class OneBitPackageDefaultsTests
     {
         [Test]
+        public void ClockConnectorAndClockPinBothRemainConnectedPortCandidates()
+        {
+            var world = OneBitWorldEdits.PlaceComponent(OneBitWorldDesign.Empty(
+                new WorldBounds(6, 6, 4)), BuiltInPinCatalog.SrFlipFlop,
+                new GridCell(2, 1, 0), GridOrientation.Default);
+            world = OneBitWorldEdits.AttachWorldClockPin(world,
+                world.Components[0].Id);
+            var snapshot = OneBitModuleSnapshotBuilder.Preview(world,
+                new CellRegion(new GridCell(2, 1, 0),
+                    new GridCell(2, 1, 0)));
+            var choices = OneBitPackageDefaults.ForSelection(snapshot);
+            Assert.That(snapshot.PortCandidates.Count, Is.EqualTo(6));
+            Assert.That(choices.Count, Is.EqualTo(6));
+            foreach (var candidate in snapshot.PortCandidates)
+            {
+                var mapped = false;
+                foreach (var choice in choices)
+                    if (choice.BitZeroTarget.Equals(candidate.InternalEndpoint))
+                        mapped = true;
+                Assert.That(mapped, Is.True,
+                    "A connected physical candidate must not be deduplicated by net.");
+            }
+        }
+
+        [Test]
         public void OneCellSrSuggestsThreeInputsOppositeTwoOutputsWithExactTargets()
         {
             var world = OneBitWorldEdits.PlaceComponent(OneBitWorldDesign.Empty(

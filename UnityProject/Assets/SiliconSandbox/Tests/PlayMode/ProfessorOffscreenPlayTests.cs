@@ -37,8 +37,7 @@ namespace SiliconSandbox.Tests.PlayMode
             var sourceSrId = session.Design.Components[0].Id;
             var draft = session.PreviewPackage(new CellRegion(
                 new GridCell(25, 1, 25), new GridCell(25, 1, 25)), "SR memory");
-            for (var i = draft.Ports.Count - 1; i >= 0; i--)
-                if (draft.Ports[i].Name == "Q_bar") draft.RemovePort(i);
+            Assert.That(draft.Ports.Count, Is.EqualTo(5));
             Assert.That(bootstrap.PublishPackage(draft),
                 Does.Contain("Published module"));
             OneBitModuleVersion version = null;

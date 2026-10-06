@@ -76,6 +76,37 @@ namespace SiliconSandbox.Tests.EditMode
         }
 
         [Test]
+        public void CompactExteriorRoundTripsWithoutReplacingCapturedBounds()
+        {
+            var version = new OneBitModuleVersion(Guid.NewGuid(),
+                Guid.NewGuid(), "Compact", new GridCell(3, 1, 2),
+                new GridCell(1, 1, 1),
+                Array.Empty<PlacedOneBitComponent>(), EmptyTopology(),
+                Array.Empty<OneBitModulePort>());
+            var moduleJson = WorldV1JsonWriter.WriteModule(version);
+            var record = Encoding.UTF8.GetString(moduleJson);
+            Assert.That(record, Does.Contain("\"sizeCells\":[3,1,2]"));
+            Assert.That(record,
+                Does.Contain("\"exteriorSizeCells\":[1,1,1]"));
+            var archive = WorldV1ArchiveCodec.Write(Snapshot(version));
+            using (var input = new MemoryStream(archive))
+            {
+                var loaded = WorldV1ArchiveCodec.Read(input).Snapshot;
+                Assert.That(loaded.ModuleVersions[version.VersionId].SizeCells,
+                    Is.EqualTo(new GridCell(3, 1, 2)));
+                Assert.That(loaded.ModuleVersions[version.VersionId]
+                    .ExteriorSizeCells, Is.EqualTo(new GridCell(1, 1, 1)));
+                Assert.That(loaded.Design.Modules[0].SizeCells,
+                    Is.EqualTo(new GridCell(1, 1, 1)));
+            }
+            var missingExterior = record.Replace(
+                "\"exteriorSizeCells\":[1,1,1],", "");
+            Assert.That(missingExterior, Is.Not.EqualTo(record));
+            Assert.Throws<InvalidDataException>(() => WorldV1JsonReader.ReadModule(
+                Encoding.UTF8.GetBytes(missingExterior)));
+        }
+
+        [Test]
         public void DamagedWorldBytesCannotBecomeAPlaceholderWorld()
         {
             var original = WorldV1ArchiveCodec.Write(Snapshot(null));
@@ -102,7 +133,8 @@ namespace SiliconSandbox.Tests.EditMode
                 modules.Add(new PlacedOneBitModuleInstance(Guid.NewGuid(),
                     Guid.NewGuid(), version.FamilyId, version.VersionId,
                     "Placed", new GridCell(2, 1, 2), GridOrientation.Default,
-                    version.SizeCells, Array.Empty<OneBitPortInterface>()));
+                    version.ExteriorSizeCells,
+                    Array.Empty<OneBitPortInterface>()));
                 versions.Add(version.VersionId, version);
             }
             var design = new OneBitWorldDesign(new WorldBounds(8, 8, 4),

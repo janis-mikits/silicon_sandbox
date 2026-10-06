@@ -60,13 +60,17 @@ namespace SiliconSandbox.Persistence
         public static OneBitModuleVersion ReadModule(byte[] bytes)
         {
             var root = V1JsonReader.Object(V1JsonReader.Root(bytes),
-                "familyId", "versionId", "name", "sizeCells", "ports",
+                "familyId", "versionId", "name", "sizeCells",
+                "exteriorSizeCells", "ports",
                 "childVersionIds", "design");
             var size = Cell(root["sizeCells"]);
+            var exteriorSize = Cell(root["exteriorSizeCells"]);
             var childIds = V1JsonReader.Array(root["childVersionIds"]);
             if (childIds.Count != 0)
                 throw Invalid("Nested modules are not a V1 first-playable record.");
-            if (size.X < 1 || size.Y < 1 || size.Z < 1)
+            if (size.X < 1 || size.Y < 1 || size.Z < 1 ||
+                exteriorSize.X < 1 || exteriorSize.Y < 1 ||
+                exteriorSize.Z < 1)
                 throw Invalid("Module size must be positive.");
             var design = ReadDesign(root["design"], false);
             OneBitTopologyGraphBuilder.Build(design.topology);
@@ -97,7 +101,7 @@ namespace SiliconSandbox.Persistence
             }
             return new OneBitModuleVersion(V1JsonReader.Uuid(root["familyId"]),
                 V1JsonReader.Uuid(root["versionId"]),
-                V1JsonReader.String(root["name"]), size,
+                V1JsonReader.String(root["name"]), size, exteriorSize,
                 design.components, design.topology, ports);
         }
 
@@ -335,7 +339,7 @@ namespace SiliconSandbox.Persistence
             OneBitModuleVersion version)
         {
             if (instance.FamilyId != version.FamilyId ||
-                !instance.SizeCells.Equals(version.SizeCells) ||
+                !instance.SizeCells.Equals(version.ExteriorSizeCells) ||
                 instance.InterfacePorts.Count != version.Ports.Count)
                 throw Invalid("Placed interface disagrees with exact module version.");
             var byId = new Dictionary<Guid, OneBitModulePort>();

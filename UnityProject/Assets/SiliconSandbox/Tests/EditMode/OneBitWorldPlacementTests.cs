@@ -13,6 +13,88 @@ namespace SiliconSandbox.Tests.EditMode
         private static readonly WorldBounds Bounds = new WorldBounds(20, 20, 10);
 
         [Test]
+        public void BreakingComponentLeavesItsWireOpenAndMakesCellReusable()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(Bounds));
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(2, 1, 3), GridOrientation.Default);
+            session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(7, 1, 3), GridOrientation.Default);
+            var source = session.Design.Components[0];
+            var gate = session.Design.Components[1];
+            session.ConnectPins(JoinMember.ComponentPin(source.Id,
+                source.PinIds["OUT"]), JoinMember.ComponentPin(gate.Id,
+                gate.PinIds["A"]));
+            var routeId = session.Design.Topology.Connectors[0].Id;
+            session.BreakComponent(source.Id);
+            Assert.That(session.Design.Components.Count, Is.EqualTo(1));
+            Assert.That(session.Design.Topology.Connectors[0].Id,
+                Is.EqualTo(routeId), "Breaking the block must not erase its wire.");
+            Assert.That(session.Design.Topology.Pins.Count, Is.EqualTo(3));
+            Assert.That(session.Design.Topology.Joins.Count, Is.EqualTo(1));
+            Assert.That(session.Design.Topology.Joins[0].Members.Count,
+                Is.EqualTo(2));
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(2, 1, 3), GridOrientation.Default);
+            Assert.That(session.Design.Components.Count, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void BreakingModuleLeavesTheExternalWireAndFreesItsCell()
+        {
+            var sourceWorld = OneBitWorldEdits.PlaceComponent(
+                OneBitWorldDesign.Empty(Bounds), BuiltInPinCatalog.SrFlipFlop,
+                new GridCell(2, 1, 2), GridOrientation.Default);
+            var draft = new OneBitPackageDraft(sourceWorld,
+                new CellRegion(new GridCell(2, 1, 2),
+                    new GridCell(2, 1, 2)), "SR");
+            var version = draft.BuildCandidate(Guid.NewGuid());
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(Bounds));
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(2, 1, 4), GridOrientation.Default);
+            session.PlaceModule(version, "Copy", new GridCell(6, 1, 4),
+                GridOrientation.Default);
+            var source = session.Design.Components[0];
+            var placed = session.Design.Modules[0];
+            session.ConnectPins(JoinMember.ComponentPin(source.Id,
+                source.PinIds["OUT"]), JoinMember.ModulePortBit(placed.Id,
+                version.Ports[0].Id, 0));
+            var wireId = session.Design.Topology.Connectors[0].Id;
+            session.BreakModule(placed.Id);
+            Assert.That(session.Design.Modules, Is.Empty);
+            Assert.That(session.Design.Topology.ModulePorts, Is.Empty);
+            Assert.That(session.Design.Topology.Connectors[0].Id,
+                Is.EqualTo(wireId));
+            Assert.That(session.Design.Topology.Joins.Count, Is.EqualTo(1));
+            session.PlaceModule(version, "Replacement", new GridCell(6, 1, 4),
+                GridOrientation.Default);
+            Assert.That(session.Design.Modules.Count, Is.EqualTo(1));
+            Assert.That(session.Design.Modules[0].InstanceId,
+                Is.Not.EqualTo(placed.InstanceId));
+        }
+
+        [Test]
+        public void BreakingWholeConnectorFreesBothPinsForNewWire()
+        {
+            var session = new OneBitWorldSession(OneBitWorldDesign.Empty(Bounds));
+            session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(2, 1, 4), GridOrientation.Default);
+            session.PlaceComponent(BuiltInPinCatalog.And,
+                new GridCell(7, 1, 4), GridOrientation.Default);
+            var source = session.Design.Components[0];
+            var gate = session.Design.Components[1];
+            var output = JoinMember.ComponentPin(source.Id,
+                source.PinIds["OUT"]);
+            var input = JoinMember.ComponentPin(gate.Id, gate.PinIds["A"]);
+            session.ConnectPins(output, input);
+            session.BreakConnector(session.Design.Topology.Connectors[0].Id);
+            Assert.That(session.Design.Topology.Connectors, Is.Empty);
+            Assert.That(session.Design.Topology.Joins, Is.Empty);
+            session.ConnectPins(output, input);
+            Assert.That(session.Design.Topology.Connectors.Count, Is.EqualTo(1));
+        }
+
+        [Test]
         public void PlaceSourceAndAndGateCreatesStableVersionedPinsAndDisconnectedZInputs()
         {
             var empty = OneBitWorldDesign.Empty(Bounds);
