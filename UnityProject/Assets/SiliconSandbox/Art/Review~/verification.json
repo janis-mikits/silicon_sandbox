@@ -1,0 +1,269 @@
+{
+  "result": "PASS",
+  "checks": [
+    "13 FBX round trips",
+    "literal cell dimensions and pin origin",
+    "triangle counts",
+    "one material slot each",
+    "finite in-range UVs",
+    "nondegenerate triangles",
+    "outward closed meshes and manifold edge incidence",
+    "64x64 atlas",
+    "8 inspected reference file SHA-256 hashes unchanged"
+  ],
+  "assets": [
+    {
+      "name": "SS_SourceBody",
+      "result": "PASS",
+      "triangles": 44,
+      "exportedBoundsUnity": [
+        [
+          -0.38999998569488525,
+          -0.39000001549720764,
+          -0.39000001549720764
+        ],
+        [
+          0.38999998569488525,
+          0.39000001549720764,
+          0.39000001549720764
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.47272261573622626
+    },
+    {
+      "name": "SS_AndBody",
+      "result": "PASS",
+      "triangles": 44,
+      "exportedBoundsUnity": [
+        [
+          -0.38999998569488525,
+          -0.39000001549720764,
+          -0.39000001549720764
+        ],
+        [
+          0.38999998569488525,
+          0.39000001549720764,
+          0.39000001549720764
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.47272261573622626
+    },
+    {
+      "name": "SS_SrBody",
+      "result": "PASS",
+      "triangles": 44,
+      "exportedBoundsUnity": [
+        [
+          -0.38999998569488525,
+          -0.39000001549720764,
+          -0.39000001549720764
+        ],
+        [
+          0.38999998569488525,
+          0.39000001549720764,
+          0.39000001549720764
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.47272261573622626
+    },
+    {
+      "name": "SS_ModuleBody",
+      "result": "PASS",
+      "triangles": 44,
+      "exportedBoundsUnity": [
+        [
+          -0.4099999964237213,
+          -0.4100000262260437,
+          -0.4100000262260437
+        ],
+        [
+          0.4099999964237213,
+          0.4100000262260437,
+          0.4100000262260437
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.5494426786899569
+    },
+    {
+      "name": "SS_Pin",
+      "result": "PASS",
+      "triangles": 44,
+      "exportedBoundsUnity": [
+        [
+          -0.10000000149011612,
+          -0.14000001549720764,
+          -0.10000000894069672
+        ],
+        [
+          0.10000000149011612,
+          0.0625000074505806,
+          0.10000000894069672
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.006075000110286054
+    },
+    {
+      "name": "SS_WireStraight",
+      "result": "PASS",
+      "triangles": 44,
+      "exportedBoundsUnity": [
+        [
+          -0.125,
+          -0.5,
+          -0.12500004470348358
+        ],
+        [
+          0.125,
+          0.5,
+          0.12500004470348358
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.04687499980597448
+    },
+    {
+      "name": "SS_WireElbow",
+      "result": "PASS",
+      "triangles": 68,
+      "exportedBoundsUnity": [
+        [
+          -0.5,
+          -0.125,
+          -0.125
+        ],
+        [
+          0.125,
+          0.12500004470348358,
+          0.5
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.04687499965075404
+    },
+    {
+      "name": "SS_IdentityRing",
+      "result": "PASS",
+      "triangles": 96,
+      "exportedBoundsUnity": [
+        [
+          -0.12800000607967377,
+          -0.018000008538365364,
+          -0.12800000607967377
+        ],
+        [
+          0.12800000607967377,
+          0.018000008538365364,
+          0.12800000607967377
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.00010886424059087148
+    },
+    {
+      "name": "SS_Junction",
+      "result": "PASS",
+      "triangles": 80,
+      "exportedBoundsUnity": [
+        [
+          -0.16167984902858734,
+          -0.17000000178813934,
+          -0.17000000178813934
+        ],
+        [
+          0.16167984902858734,
+          0.17000000178813934,
+          0.17000000178813934
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.01797525227297931
+    },
+    {
+      "name": "SS_SourceValue_0",
+      "result": "PASS",
+      "triangles": 2,
+      "exportedBoundsUnity": [
+        [
+          -0.3700000047683716,
+          0.3904999792575836,
+          -0.37000003457069397
+        ],
+        [
+          0.3700000047683716,
+          0.3905000388622284,
+          0.3699999749660492
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.07127927243709564
+    },
+    {
+      "name": "SS_SourceValue_1",
+      "result": "PASS",
+      "triangles": 2,
+      "exportedBoundsUnity": [
+        [
+          -0.3700000047683716,
+          0.3904999792575836,
+          -0.37000003457069397
+        ],
+        [
+          0.3700000047683716,
+          0.3905000388622284,
+          0.3699999749660492
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.07127927243709564
+    },
+    {
+      "name": "SS_SourceValue_X",
+      "result": "PASS",
+      "triangles": 2,
+      "exportedBoundsUnity": [
+        [
+          -0.3700000047683716,
+          0.3904999792575836,
+          -0.37000003457069397
+        ],
+        [
+          0.3700000047683716,
+          0.3905000388622284,
+          0.3699999749660492
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.07127927243709564
+    },
+    {
+      "name": "SS_SourceValue_Z",
+      "result": "PASS",
+      "triangles": 2,
+      "exportedBoundsUnity": [
+        [
+          -0.3700000047683716,
+          0.3904999792575836,
+          -0.37000003457069397
+        ],
+        [
+          0.3700000047683716,
+          0.3905000388622284,
+          0.3699999749660492
+        ]
+      ],
+      "materialSlots": 1,
+      "signedVolume": 0.07127927243709564
+    }
+  ],
+  "notTested": [
+    "Unity import axis/scale/material mapping",
+    "Unity interaction and runtime signal update",
+    "Windows/macOS player performance",
+    "X pulse animation (owned by renderer)"
+  ]
+}

@@ -1,0 +1,233 @@
+[
+  {
+    "file": "art/reference-models/current_source_on.blend",
+    "sha256": "2e63338753de778ee5a3c332a00ba97aa301e728e7ac3e196ea23326644a4509",
+    "objects": [
+      {
+        "name": "Cylinder.003",
+        "vertices": 66,
+        "polygons": 96
+      },
+      {
+        "name": "Cylinder.002",
+        "vertices": 66,
+        "polygons": 96
+      },
+      {
+        "name": "Cylinder.001",
+        "vertices": 128,
+        "polygons": 68
+      },
+      {
+        "name": "Cylinder",
+        "vertices": 14,
+        "polygons": 11
+      },
+      {
+        "name": "Cube",
+        "vertices": 8,
+        "polygons": 6
+      }
+    ],
+    "bounds": [
+      [
+        -1.0,
+        -2.5999999046325684,
+        -1.0
+      ],
+      [
+        1.0,
+        2.5999999046325684,
+        1.0
+      ]
+    ]
+  },
+  {
+    "file": "art/reference-models/current_source_on.fbx",
+    "sha256": "344efdd1788cbcc8c82b9f4771ebd6814c593851fb718b7155f310cadb1f394f",
+    "objects": [
+      {
+        "name": "Cube.001",
+        "type": "MESH"
+      },
+      {
+        "name": "Cylinder.004",
+        "type": "MESH"
+      },
+      {
+        "name": "Cylinder.005",
+        "type": "MESH"
+      },
+      {
+        "name": "Cylinder.006",
+        "type": "MESH"
+      },
+      {
+        "name": "Cylinder.007",
+        "type": "MESH"
+      }
+    ]
+  },
+  {
+    "file": "art/reference-models/AND_gate.blend",
+    "sha256": "bebabf62ccff65e3efb25aa1b7d5ca9199be9b86b7da0d66235a46d001d7fab7",
+    "objects": [
+      {
+        "name": "Cylinder.004",
+        "vertices": 66,
+        "polygons": 96
+      },
+      {
+        "name": "Cylinder.005",
+        "vertices": 66,
+        "polygons": 96
+      },
+      {
+        "name": "Cylinder.006",
+        "vertices": 66,
+        "polygons": 96
+      },
+      {
+        "name": "Cylinder.007",
+        "vertices": 42,
+        "polygons": 25
+      },
+      {
+        "name": "Cube.003",
+        "vertices": 8,
+        "polygons": 6
+      },
+      {
+        "name": "Cube.002",
+        "vertices": 8,
+        "polygons": 6
+      },
+      {
+        "name": "Cube.001",
+        "vertices": 8,
+        "polygons": 6
+      },
+      {
+        "name": "Cube.004",
+        "vertices": 8,
+        "polygons": 6
+      }
+    ],
+    "bounds": [
+      [
+        -1.0,
+        -1.0,
+        -1.0000038146972656
+      ],
+      [
+        1.0,
+        1.0,
+        1.0
+      ]
+    ]
+  },
+  {
+    "file": "art/reference-models/AND_gate.fbx",
+    "sha256": "fde4faa8d984be68f8ef2b120f865df44ea92f6716805fc771f66ef4c4b2fdfc",
+    "objects": [
+      {
+        "name": "Cube.005",
+        "type": "MESH"
+      },
+      {
+        "name": "Cylinder.009",
+        "type": "MESH"
+      },
+      {
+        "name": "Cube.007",
+        "type": "MESH"
+      },
+      {
+        "name": "Cylinder.011",
+        "type": "MESH"
+      },
+      {
+        "name": "Cube.008",
+        "type": "MESH"
+      },
+      {
+        "name": "Cube.006",
+        "type": "MESH"
+      },
+      {
+        "name": "Cylinder.008",
+        "type": "MESH"
+      },
+      {
+        "name": "Cylinder.010",
+        "type": "MESH"
+      }
+    ]
+  },
+  {
+    "file": "art/reference-models/wire_straight_power_off.blend",
+    "sha256": "a87e10a74c2840b6c9538a51e7619c72940b311ac9ca069f439b23a230479c60",
+    "objects": [
+      {
+        "name": "Cylinder.008",
+        "vertices": 64,
+        "polygons": 34
+      }
+    ],
+    "bounds": [
+      [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      [
+        1.0,
+        1.0,
+        1.0
+      ]
+    ]
+  },
+  {
+    "file": "art/reference-models/wire_straight_power_off.fbx",
+    "sha256": "3e43559f075ac10065857758df54faa3c5164a86a0859a82dd0d1f4a8e582af5",
+    "objects": [
+      {
+        "name": "Cylinder.009",
+        "type": "MESH"
+      }
+    ]
+  },
+  {
+    "file": "art/reference-models/wire_bent_power_off.blend",
+    "sha256": "0adf0ed95100c609a891d4e11dbc53eb9c17ac452bb048dd348e0501efe30697",
+    "objects": [
+      {
+        "name": "Cylinder.009",
+        "vertices": 288,
+        "polygons": 258
+      }
+    ],
+    "bounds": [
+      [
+        -1.0,
+        -4.285714149475098,
+        -3.1139276027679443
+      ],
+      [
+        1.0,
+        1.0,
+        1.0
+      ]
+    ]
+  },
+  {
+    "file": "art/reference-models/wire_bent_power_off.fbx",
+    "sha256": "01bef11959edd635badd7be02affc938c685e9afd6bfaa065f8b940ab53918e6",
+    "objects": [
+      {
+        "name": "Cylinder.010",
+        "type": "MESH"
+      }
+    ]
+  }
+]
