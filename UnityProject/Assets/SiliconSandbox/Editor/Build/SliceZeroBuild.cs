@@ -17,6 +17,7 @@ namespace SiliconSandbox.EditorBuild
 
         public static void EnsureScene()
         {
+            FirstPlayableArtImport.Ensure();
             if (File.Exists(ScenePath))
             {
                 ConfigureBuildScene();

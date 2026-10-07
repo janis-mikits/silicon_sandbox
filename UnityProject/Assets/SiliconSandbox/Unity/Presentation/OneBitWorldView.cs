@@ -21,6 +21,8 @@ namespace SiliconSandbox.Presentation
             new Dictionary<Guid, JoinMember>();
         private readonly Dictionary<JoinMember, Renderer> pinRenderers =
             new Dictionary<JoinMember, Renderer>();
+        private readonly Dictionary<Guid, MeshFilter> sourceValueFilters =
+            new Dictionary<Guid, MeshFilter>();
         private readonly Dictionary<Guid, PlacedOneBitComponent> drawnComponents =
             new Dictionary<Guid, PlacedOneBitComponent>();
         private readonly Dictionary<Guid, PlacedOneBitModuleInstance> drawnModules =
@@ -45,6 +47,7 @@ namespace SiliconSandbox.Presentation
         private Transform generatedRoot;
         private ulong shownRevision = ulong.MaxValue;
         private OneBitWorldSession session;
+        private OneBitVisualArt art;
 
         private sealed class JunctionGraphic
         {
@@ -58,6 +61,9 @@ namespace SiliconSandbox.Presentation
         private void Awake()
         {
             signalProperties = new MaterialPropertyBlock();
+            art = Resources.Load<OneBitVisualArt>("SiliconSandboxVisualArt");
+            if (art == null || !art.IsComplete)
+                throw new InvalidOperationException("First-playable visual art is missing.");
         }
 
         public void Attach(OneBitWorldSession activeSession)
@@ -77,6 +83,7 @@ namespace SiliconSandbox.Presentation
             routeBodies.Clear();
             routeFirstMembers.Clear();
             pinRenderers.Clear();
+            sourceValueFilters.Clear();
             shownRevision = ulong.MaxValue;
             RebuildIfNeeded();
             RefreshSignals();
@@ -131,6 +138,7 @@ namespace SiliconSandbox.Presentation
                     foreach (var pin in pair.Value.BuildPins())
                         pinRenderers.Remove(JoinMember.ComponentPin(
                             pair.Key, pin.PinId));
+                    sourceValueFilters.Remove(pair.Key);
                     Retire(componentRoots[pair.Key]);
                     componentRoots.Remove(pair.Key);
                 }
@@ -234,7 +242,9 @@ namespace SiliconSandbox.Presentation
                         PrimitiveType.Sphere, RegionRoot(item.Cell));
                     marker.transform.position = RoutePosition(item.Cell,
                         item.PointQ, item.Channel);
-                    marker.transform.localScale = Vector3.one * 0.34f;
+                    marker.GetComponent<MeshFilter>().sharedMesh = art.Junction;
+                    marker.GetComponent<Renderer>().sharedMaterial = art.TintMaterial;
+                    marker.GetComponent<SphereCollider>().radius = 0.17f;
                     marker.AddComponent<WorldSelectablePart>().Initialize(
                         WorldPartKind.ConnectorNode, item.ConnectorId,
                         item.NodeId);
@@ -294,27 +304,32 @@ namespace SiliconSandbox.Presentation
                 PrimitiveType.Cube, root);
             body.transform.position = new Vector3(component.AnchorCell.X + 0.5f,
                 component.AnchorCell.Y + 0.5f, component.AnchorCell.Z + 0.5f);
-            body.transform.localScale = new Vector3(0.78f, 0.78f, 0.78f);
-            body.GetComponent<Renderer>().material.color = ComponentColor(component.TypeId);
+            body.transform.rotation = OrientationRotation(component.Orientation);
+            body.GetComponent<MeshFilter>().sharedMesh =
+                component.TypeId == BuiltInPinCatalog.Source ? art.SourceBody :
+                component.TypeId == BuiltInPinCatalog.And ? art.AndBody :
+                art.SrBody;
+            body.GetComponent<Renderer>().sharedMaterial = art.AtlasMaterial;
+            body.GetComponent<BoxCollider>().size = Vector3.one * 0.78f;
             body.AddComponent<WorldSelectablePart>().Initialize(
                 WorldPartKind.ComponentBody, component.Id, Guid.Empty);
 
-            var label = new GameObject("Component label");
-            label.transform.SetParent(body.transform, false);
-            label.transform.localPosition = new Vector3(0f, 0.58f, 0f);
-            var mesh = label.AddComponent<TextMesh>();
-            mesh.text = component.TypeId == BuiltInPinCatalog.Source ? "SOURCE" :
-                component.TypeId == BuiltInPinCatalog.And ? "AND" : "SR";
-            mesh.anchor = TextAnchor.MiddleCenter;
-            mesh.characterSize = 0.22f;
-            mesh.fontSize = 48;
-            mesh.color = Color.black;
+            if (component.TypeId == BuiltInPinCatalog.Source)
+            {
+                var value = new GameObject("Source value " + component.Id.ToString("D"));
+                value.transform.SetParent(body.transform, false);
+                value.AddComponent<MeshFilter>().sharedMesh = art.SourceZero;
+                value.AddComponent<MeshRenderer>().sharedMaterial = art.AtlasMaterial;
+                sourceValueFilters.Add(component.Id, value.GetComponent<MeshFilter>());
+            }
             foreach (var pin in component.BuildPins())
             {
                 var pinObject = Primitive("Pin " + pin.PinId.ToString("D"),
-                    PrimitiveType.Sphere, root);
+                    PrimitiveType.Cylinder, root);
                 pinObject.transform.position = Position(pin.Cell, pin.PointQ);
-                pinObject.transform.localScale = Vector3.one * 0.2f;
+                pinObject.transform.rotation = Quaternion.FromToRotation(
+                    Vector3.up, FaceNormal(pin.PointQ));
+                SetPinShape(pinObject);
                 pinObject.AddComponent<WorldSelectablePart>().Initialize(
                     WorldPartKind.ComponentPin, component.Id, pin.PinId);
                 pinRenderers.Add(JoinMember.ComponentPin(component.Id, pin.PinId),
@@ -332,34 +347,45 @@ namespace SiliconSandbox.Presentation
                     PrimitiveType.Cube, root);
                 body.transform.position = new Vector3(cell.X + 0.5f,
                     cell.Y + 0.5f, cell.Z + 0.5f);
-                body.transform.localScale = Vector3.one * 0.82f;
-                body.GetComponent<Renderer>().material.color =
-                    session.HasModuleVersion(module.VersionId)
-                        ? new Color(0.34f, 0.58f, 0.72f)
-                        : new Color(0.82f, 0.24f, 0.24f);
+                body.transform.rotation = OrientationRotation(module.Orientation);
+                body.GetComponent<MeshFilter>().sharedMesh = art.ModuleBody;
+                body.GetComponent<Renderer>().sharedMaterial = art.AtlasMaterial;
+                body.GetComponent<BoxCollider>().size = Vector3.one * 0.82f;
+                if (!session.HasModuleVersion(module.VersionId))
+                {
+                    var missing = new MaterialPropertyBlock();
+                    missing.SetColor("_Color", new Color(0.82f, 0.24f, 0.24f));
+                    body.GetComponent<Renderer>().SetPropertyBlock(missing);
+                }
                 body.AddComponent<WorldSelectablePart>().Initialize(
                     WorldPartKind.ModuleBody, module.Id, Guid.Empty);
-            }
-            if (cells.Count > 0)
-            {
-                var label = new GameObject("Module label " + module.InstanceName);
-                label.transform.SetParent(root, false);
-                label.transform.position = new Vector3(cells[0].X + 0.5f,
-                    cells[0].Y + 1.05f, cells[0].Z + 0.5f);
-                var mesh = label.AddComponent<TextMesh>();
-                mesh.text = session.HasModuleVersion(module.VersionId)
-                    ? module.InstanceName : module.InstanceName + " MISSING";
-                mesh.anchor = TextAnchor.MiddleCenter;
-                mesh.characterSize = 0.22f;
-                mesh.fontSize = 48;
-                mesh.color = Color.black;
+                if (cell.Equals(cells[0]))
+                {
+                    var label = new GameObject("Module surface name " +
+                        module.InstanceName);
+                    label.transform.SetParent(body.transform, false);
+                    label.transform.localPosition = new Vector3(0f, 0.4106f, 0f);
+                    label.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+                    var text = label.AddComponent<TextMesh>();
+                    text.text = session.HasModuleVersion(module.VersionId)
+                        ? module.InstanceName : module.InstanceName + " MISSING";
+                    text.anchor = TextAnchor.MiddleCenter;
+                    text.alignment = TextAlignment.Center;
+                    text.fontSize = 48;
+                    text.characterSize = Mathf.Min(0.14f,
+                        0.7f / Mathf.Max(1, text.text.Length));
+                    text.color = session.HasModuleVersion(module.VersionId)
+                        ? Color.white : new Color(1f, 0.25f, 0.25f);
+                }
             }
             foreach (var port in module.BuildPortBits())
             {
                 var marker = Primitive("Module port " + port.PortId.ToString("D"),
-                    PrimitiveType.Sphere, root);
+                    PrimitiveType.Cylinder, root);
                 marker.transform.position = Position(port.Cell, port.PointQ);
-                marker.transform.localScale = Vector3.one * 0.22f;
+                marker.transform.rotation = Quaternion.FromToRotation(
+                    Vector3.up, FaceNormal(port.PointQ));
+                SetPinShape(marker);
                 marker.AddComponent<WorldSelectablePart>().Initialize(
                     WorldPartKind.ModulePort, module.Id, port.PortId);
                 pinRenderers.Add(JoinMember.ModulePortBit(module.Id,
@@ -391,16 +417,32 @@ namespace SiliconSandbox.Presentation
             foreach (var span in route.Spans)
                 DrawSpan(root.transform, route.Id, span,
                     nodes[span.FromNodeId], nodes[span.ToNodeId], renderers);
-            var cap = Primitive("Identity cap", PrimitiveType.Sphere, root.transform);
-            cap.transform.position = RoutePosition(route.Nodes[0]) +
-                Vector3.up * 0.15f;
-            cap.transform.localScale = Vector3.one * 0.09f;
-            cap.GetComponent<Renderer>().material.color = IdentityColor(route);
+            var cap = Primitive("Identity ring", PrimitiveType.Cylinder, root.transform);
+            var first = RoutePosition(route.Nodes[0]);
+            var along = Vector3.up;
+            foreach (var node in route.Nodes)
+            {
+                var candidate = RoutePosition(node) - first;
+                if (candidate.sqrMagnitude < 0.000001f) continue;
+                along = candidate.normalized;
+                break;
+            }
+            cap.transform.position = first + along * 0.14f;
+            cap.transform.rotation = Quaternion.FromToRotation(Vector3.up, along);
+            cap.GetComponent<MeshFilter>().sharedMesh = art.IdentityRing;
+            cap.GetComponent<Renderer>().sharedMaterial = art.TintMaterial;
+            var ringCollider = cap.GetComponent<CapsuleCollider>();
+            ringCollider.radius = 0.128f;
+            ringCollider.height = 0.256f;
+            var identity = new MaterialPropertyBlock();
+            identity.SetColor("_Color", IdentityColor(route));
+            identity.SetColor("_BaseColor", IdentityColor(route));
+            cap.GetComponent<Renderer>().SetPropertyBlock(identity);
             cap.AddComponent<WorldSelectablePart>().Initialize(
                 WorldPartKind.ConnectorNode, route.Id, route.Nodes[0].Id);
         }
 
-        private static void DrawSpan(Transform root, Guid connectorId, RouteSpan span,
+        private void DrawSpan(Transform root, Guid connectorId, RouteSpan span,
             RouteNode fromNode, RouteNode toNode, List<Renderer> renderers)
         {
             var from = RoutePosition(fromNode);
@@ -430,12 +472,11 @@ namespace SiliconSandbox.Presentation
             }
             var xBend = new Vector3(to.x, from.y, from.z);
             var yBend = new Vector3(to.x, to.y, from.z);
-            DrawCylinder(root, connectorId, span.Id, from, xBend, renderers);
-            DrawCylinder(root, connectorId, span.Id, xBend, yBend, renderers);
-            DrawCylinder(root, connectorId, span.Id, yBend, to, renderers);
+            DrawPath(root, connectorId, span.Id,
+                new[] { from, xBend, yBend, to }, renderers);
         }
 
-        private static void DrawCenterToFace(Transform root, Guid connectorId,
+        private void DrawCenterToFace(Transform root, Guid connectorId,
             Guid spanId, Vector3 center, Vector3 face, QuarterPoint facePoint,
             List<Renderer> renderers)
         {
@@ -456,12 +497,71 @@ namespace SiliconSandbox.Presentation
                 first = new Vector3(center.x, center.y, face.z);
                 second = new Vector3(face.x, center.y, face.z);
             }
-            DrawCylinder(root, connectorId, spanId, center, first, renderers);
-            DrawCylinder(root, connectorId, spanId, first, second, renderers);
-            DrawCylinder(root, connectorId, spanId, second, face, renderers);
+            DrawPath(root, connectorId, spanId,
+                new[] { center, first, second, face }, renderers);
         }
 
-        private static void DrawCylinder(Transform root, Guid connectorId,
+        private void DrawPath(Transform root, Guid connectorId, Guid spanId,
+            Vector3[] candidatePoints, List<Renderer> renderers)
+        {
+            var points = new List<Vector3>(candidatePoints.Length);
+            foreach (var point in candidatePoints)
+                if (points.Count == 0 ||
+                    (point - points[points.Count - 1]).sqrMagnitude > 0.000001f)
+                    points.Add(point);
+            if (points.Count < 2) return;
+            var elbows = new bool[points.Count];
+            for (var i = 1; i < points.Count - 1; i++)
+            {
+                var incoming = points[i] - points[i - 1];
+                var outgoing = points[i + 1] - points[i];
+                if (Mathf.Abs(Vector3.Dot(incoming.normalized,
+                        outgoing.normalized)) < 0.001f &&
+                    incoming.magnitude >= (elbows[i - 1] ? 1f : 0.5f) - 0.0001f &&
+                    outgoing.magnitude >= 0.5f - 0.0001f)
+                    elbows[i] = true;
+            }
+            for (var i = 0; i < points.Count - 1; i++)
+            {
+                var direction = (points[i + 1] - points[i]).normalized;
+                DrawCylinder(root, connectorId, spanId,
+                    points[i] + direction * (elbows[i] ? 0.5f : 0f),
+                    points[i + 1] - direction * (elbows[i + 1] ? 0.5f : 0f),
+                    renderers);
+            }
+            for (var i = 1; i < points.Count - 1; i++)
+                if (elbows[i])
+                    DrawElbow(root, connectorId, spanId,
+                        points[i - 1], points[i], points[i + 1], renderers);
+        }
+
+        private void DrawElbow(Transform root, Guid connectorId, Guid spanId,
+            Vector3 previous, Vector3 corner, Vector3 next,
+            List<Renderer> renderers)
+        {
+            var towardPrevious = (previous - corner).normalized;
+            var towardNext = (next - corner).normalized;
+            var right = -towardPrevious;
+            var up = Vector3.Cross(towardNext, right);
+            var elbow = new GameObject("Elbow " + spanId.ToString("D"));
+            elbow.transform.SetParent(root, false);
+            elbow.transform.position = corner;
+            elbow.transform.rotation = Quaternion.LookRotation(towardNext, up);
+            elbow.AddComponent<MeshFilter>().sharedMesh = art.WireElbow;
+            var renderer = elbow.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = art.TintMaterial;
+            var firstArm = elbow.AddComponent<BoxCollider>();
+            firstArm.center = new Vector3(-0.25f, 0f, 0f);
+            firstArm.size = new Vector3(0.5f, 0.25f, 0.25f);
+            var secondArm = elbow.AddComponent<BoxCollider>();
+            secondArm.center = new Vector3(0f, 0f, 0.25f);
+            secondArm.size = new Vector3(0.25f, 0.25f, 0.5f);
+            elbow.AddComponent<WorldSelectablePart>().Initialize(
+                WorldPartKind.ConnectorSpan, connectorId, spanId);
+            renderers.Add(renderer);
+        }
+
+        private void DrawCylinder(Transform root, Guid connectorId,
             Guid spanId, Vector3 from, Vector3 to, List<Renderer> renderers)
         {
             var delta = to - from;
@@ -470,7 +570,12 @@ namespace SiliconSandbox.Presentation
                 PrimitiveType.Cylinder, root);
             cylinder.transform.position = (from + to) * 0.5f;
             cylinder.transform.rotation = Quaternion.FromToRotation(Vector3.up, delta);
-            cylinder.transform.localScale = new Vector3(0.12f, delta.magnitude * 0.5f, 0.12f);
+            cylinder.transform.localScale = new Vector3(1f, delta.magnitude, 1f);
+            cylinder.GetComponent<MeshFilter>().sharedMesh = art.WireStraight;
+            cylinder.GetComponent<Renderer>().sharedMaterial = art.TintMaterial;
+            var collider = cylinder.GetComponent<CapsuleCollider>();
+            collider.radius = 0.125f;
+            collider.height = 1f;
             cylinder.AddComponent<WorldSelectablePart>().Initialize(
                 WorldPartKind.ConnectorSpan, connectorId, spanId);
             renderers.Add(cylinder.GetComponent<Renderer>());
@@ -478,6 +583,13 @@ namespace SiliconSandbox.Presentation
 
         private void RefreshSignals()
         {
+            // The marking belongs to the source, not the resolved net. Two
+            // opposing drivers show their own values while their wire shows X.
+            foreach (var pair in sourceValueFilters)
+            {
+                var wanted = art.SourceValue(session.Circuit.Source(pair.Key).Drive);
+                if (pair.Value.sharedMesh != wanted) pair.Value.sharedMesh = wanted;
+            }
             foreach (var pair in signalRenderersByNet)
             {
                 var value = session.Circuit.Net(pair.Key).Value;
@@ -519,16 +631,50 @@ namespace SiliconSandbox.Presentation
             }
         }
 
-        private static Color ComponentColor(string typeId) =>
-            typeId == BuiltInPinCatalog.Source ? new Color(0.65f, 0.65f, 0.8f) :
-            typeId == BuiltInPinCatalog.And ? new Color(0.85f, 0.7f, 0.3f) :
-            new Color(0.72f, 0.55f, 0.8f);
-
         private static Color IdentityColor(ConnectorRoute route)
         {
             if (string.IsNullOrEmpty(route.IdentityColor)) return new Color(0.8f, 0.8f, 0.75f);
             return ColorUtility.TryParseHtmlString(route.IdentityColor, out var color)
                 ? color : new Color(0.8f, 0.8f, 0.75f);
+        }
+
+        private void SetPinShape(GameObject pin)
+        {
+            pin.GetComponent<MeshFilter>().sharedMesh = art.Pin;
+            pin.GetComponent<Renderer>().sharedMaterial = art.TintMaterial;
+            var collider = pin.GetComponent<CapsuleCollider>();
+            collider.center = new Vector3(0f, -0.03875f, 0f);
+            collider.radius = 0.1f;
+            collider.height = 0.2025f;
+        }
+
+        private static Quaternion OrientationRotation(GridOrientation orientation) =>
+            Quaternion.LookRotation(Direction(orientation.Forward),
+                Direction(orientation.Up));
+
+        private static Vector3 Direction(GridDirection direction)
+        {
+            switch (direction)
+            {
+                case GridDirection.North: return Vector3.forward;
+                case GridDirection.South: return Vector3.back;
+                case GridDirection.East: return Vector3.right;
+                case GridDirection.West: return Vector3.left;
+                case GridDirection.Up: return Vector3.up;
+                case GridDirection.Down: return Vector3.down;
+                default: throw new ArgumentOutOfRangeException(nameof(direction));
+            }
+        }
+
+        private static Vector3 FaceNormal(QuarterPoint point)
+        {
+            if (point.X == 0) return Vector3.left;
+            if (point.X == 4) return Vector3.right;
+            if (point.Y == 0) return Vector3.down;
+            if (point.Y == 4) return Vector3.up;
+            if (point.Z == 0) return Vector3.back;
+            if (point.Z == 4) return Vector3.forward;
+            throw new ArgumentException("Pin has no exterior face.", nameof(point));
         }
 
         private static Vector3 Position(GridCell cell, QuarterPoint point) =>

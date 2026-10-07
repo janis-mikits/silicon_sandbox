@@ -535,7 +535,7 @@ namespace SiliconSandbox.Interaction
             if (delta.sqrMagnitude < 0.000001f) return;
             var part = AddWirePreviewPart(PrimitiveType.Cylinder,
                 (from + to) * 0.5f,
-                new Vector3(0.15f, delta.magnitude * 0.5f, 0.15f), color);
+                new Vector3(0.25f, delta.magnitude * 0.5f, 0.25f), color);
             part.transform.rotation = Quaternion.FromToRotation(Vector3.up,
                 delta);
         }

@@ -239,6 +239,16 @@ namespace SiliconSandbox.Tests.PlayMode
             bootstrap.Session.PlaceModule(version, "Second source",
                 new GridCell(12, 1, 6), GridOrientation.Default);
             var instanceId = bootstrap.Session.Design.Modules[0].InstanceId;
+            yield return null;
+            var surfaceName = GameObject.Find("Module surface name Second source");
+            Assert.That(surfaceName, Is.Not.Null);
+            Assert.That(surfaceName.GetComponent<TextMesh>().text,
+                Is.EqualTo("Second source"));
+            Assert.That(surfaceName.transform.localPosition.y,
+                Is.EqualTo(0.4106f).Within(0.001f),
+                "The module name must sit on the body surface.");
+            Assert.That(surfaceName.transform.parent.GetComponent<WorldSelectablePart>()
+                .Kind, Is.EqualTo(WorldPartKind.ModuleBody));
             bootstrap.SaveCurrentWorldFile();
             bootstrap.ReopenCurrentWorldFile();
             Assert.That(bootstrap.Session.Design.Modules.Count, Is.EqualTo(1));
