@@ -2,12 +2,19 @@
 
 ## In this file
 
+- [Development-stage world compatibility](#development-stage-world-compatibility)
 - [Saved design versus transient simulation](#saved-design-versus-transient-simulation)
 - [Nonvolatile exception](#nonvolatile-exception)
 - [Source startup state](#source-startup-state)
 - [First playable world save container](#first-playable-world-save-container)
 - [Consistent save and recovery](#consistent-save-and-recovery)
 - [World and format operations](#world-and-format-operations)
+
+## Development-stage world compatibility
+
+**Decision, 9 October 2026:** Until the user explicitly labels SiliconSandbox a finished product, every world created during development is a disposable demo world. New code and save-format changes do not need to open, preserve the appearance of, or migrate older demo worlds. If a change breaks them, identified demo-world saves may be deleted instead of constraining the new design; deletion is not the default response to every update and does not extend to code, assets, Git history, or unrelated data. Reaching the professor milestone or another development milestone does not by itself mark the product finished. Demo worlds created before that explicit label remain disposable afterward.
+
+This policy concerns **compatibility across development versions**, not whether saving works. The current build must still save and reopen its own authored worlds correctly, preserve the required design and identities within that build, and pass the applicable [acceptance check](delivery-and-acceptance.md#first-playable-professor-milestone). Any later compatibility or migration language in this specification applies to supported current-format worlds or worlds created after the user labels the game finished, not to older development demos. Those post-finished worlds receive the copy-preserving format-migration protection under [world and format operations](#world-and-format-operations). Access and deletion of files outside the authorized workspace still require the applicable permission.
 
 ## Saved design versus transient simulation
 
@@ -37,4 +44,4 @@ A save takes a consistent snapshot after the current simulation time slot finish
 
 ## World and format operations
 
-Duplicate World makes an independent world identity and deep copy of design, embedded module definitions, NVM, and saved player position; later edits or NVM writes do not cross-affect the copies. Delete World moves world files to operating-system or in-game recoverable trash and does not delete shared library modules. Save files record a format version. Migration converts a copy and retains the original; an older game version must not silently overwrite a world saved by a newer version. Educational unlocks and overall progress live in a separate local player profile shared across worlds, while an education world saves its own current lesson/challenge position. Library deletion protection must count duplicated worlds as references while they still exist.
+Duplicate World makes an independent world identity and deep copy of design, embedded module definitions, NVM, and saved player position; later edits or NVM writes do not cross-affect the copies. Delete World moves world files to operating-system or in-game recoverable trash and does not delete shared library modules. Save files record a format version. For worlds created after the user explicitly labels the game finished, migration converts a copy and retains the original; an older game version must not silently overwrite a world saved by a newer version. Earlier development demo worlds follow the [disposable-world policy](#development-stage-world-compatibility). Educational unlocks and overall progress live in a separate local player profile shared across worlds, while an education world saves its own current lesson/challenge position. Library deletion protection must count duplicated worlds as references while they still exist.

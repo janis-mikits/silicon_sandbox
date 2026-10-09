@@ -15,6 +15,7 @@
 - `README.md` defines the source-of-truth hierarchy. The operative game specification is in `docs/`; use `INDEX.md` to find the relevant files. Historical research and the source DOCX do not override the canonical specification.
 - Do not silently choose behavior when the specification is missing, ambiguous, or contradictory. Ask the user with the affected rule, concrete options, and a recommendation before proceeding with dependent work. The same applies to changes in scope, player-visible behavior, saved data, public interfaces, dependencies, and material performance or platform tradeoffs.
 - Record an approved game-design decision in the relevant canonical document. Update `INDEX.md` if document responsibilities or routing change. Keep routine code-level choices small and explain consequential choices in the task report.
+- Until the user explicitly labels the game a finished product, treat worlds created during development as disposable demos. Do not make backward compatibility with those worlds a constraint on new code or save-schema changes; a migration is optional, not required. The current build must still pass its own save/reopen acceptance checks. This rule does not authorize deleting code, assets, Git history, unrelated files, or data outside the authorized workspace. See `docs/saving-and-recovery.md` for the stage-specific save policy.
 - Do not modify the original `SiliconSandbox_Design_Document_Revised.docx` unless the user specifically requests it.
 
 ## Implementation and verification
