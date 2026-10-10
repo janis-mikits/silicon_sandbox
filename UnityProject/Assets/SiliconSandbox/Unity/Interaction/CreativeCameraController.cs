@@ -58,6 +58,27 @@ namespace SiliconSandbox.Interaction
             Cursor.visible = open;
         }
 
+        public bool TryJump()
+        {
+            if (interfaceOpen || Flying || !HasGroundSupport()) return false;
+            verticalVelocity = 6f;
+            return true;
+        }
+
+        private bool HasGroundSupport()
+        {
+            if (character.isGrounded) return true;
+            // isGrounded only describes the last CharacterController.Move.
+            // It can be false while resting after spawn or Teleport, before
+            // another Move has refreshed the collision flags.
+            var bounds = character.bounds;
+            var origin = new Vector3(bounds.center.x,
+                bounds.min.y + 0.12f, bounds.center.z);
+            return Physics.Raycast(origin, Vector3.down, out var hit,
+                0.22f, Physics.DefaultRaycastLayers,
+                QueryTriggerInteraction.Ignore) && hit.collider != character;
+        }
+
         private void Awake()
         {
             character = GetComponent<CharacterController>();
@@ -82,8 +103,8 @@ namespace SiliconSandbox.Interaction
                     Flying = !Flying;
                     verticalVelocity = 0f;
                 }
-                else if (!Flying && character.isGrounded)
-                    verticalVelocity = 6f;
+                else if (!Flying)
+                    TryJump();
                 lastSpacePress = Time.unscaledTime;
             }
 
