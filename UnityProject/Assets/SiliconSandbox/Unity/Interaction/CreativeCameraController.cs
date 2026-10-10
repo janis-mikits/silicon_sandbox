@@ -6,7 +6,7 @@ namespace SiliconSandbox.Interaction
     [RequireComponent(typeof(CharacterController))]
     public sealed class CreativeCameraController : MonoBehaviour
     {
-        private const float HeldJumpLandingDelaySeconds = 0.5f;
+        private const float HeldJumpLandingDelaySeconds = 0.15f;
 
         [SerializeField] private Transform cameraPivot;
         [SerializeField] private float mouseSensitivity = 2.4f;
