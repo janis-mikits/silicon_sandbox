@@ -39,5 +39,84 @@ namespace SiliconSandbox.Tests.PlayMode
             Assert.That(controller.TryJump(), Is.False,
                 "A second jump must still require ground support.");
         }
+
+        [UnityTest]
+        public IEnumerator HeldJumpWaitsForLandingAndHalfSecondPause()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var player = GameObject.Find("Creative player");
+            Assert.That(player, Is.Not.Null);
+            var controller = player.GetComponent<CreativeCameraController>();
+            var character = player.GetComponent<CharacterController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(character, Is.Not.Null);
+
+            var floorPosition = new Vector3(15.5f, 1.05f, 4f);
+            controller.Teleport(floorPosition);
+            Physics.SyncTransforms();
+            Assert.That(controller.TryJump(), Is.True);
+            Assert.That(controller.TryHeldJump(), Is.False,
+                "Holding Space must not create a second jump before takeoff.");
+
+            yield return null;
+            Assert.That(player.transform.position.y,
+                Is.GreaterThan(floorPosition.y));
+            var airborne = !character.isGrounded;
+            var deadline = Time.realtimeSinceStartup + 5f;
+            while (!character.isGrounded && Time.realtimeSinceStartup < deadline)
+            {
+                Assert.That(controller.TryHeldJump(), Is.False,
+                    "Holding Space must not cause a midair jump.");
+                airborne = true;
+                yield return null;
+            }
+            Assert.That(airborne, Is.True, "The first jump must leave the floor.");
+            Assert.That(character.isGrounded, Is.True,
+                "The player must land before the held jump can repeat.");
+            Assert.That(controller.TryHeldJump(), Is.False,
+                "A held jump must wait after landing.");
+
+            yield return new WaitForSecondsRealtime(0.2f);
+            Assert.That(controller.TryHeldJump(), Is.False,
+                "The landing pause must last longer than 200 ms.");
+            yield return new WaitForSecondsRealtime(0.35f);
+            Assert.That(controller.TryHeldJump(), Is.True,
+                "Holding Space should jump again after the 500 ms landing pause.");
+            Assert.That(controller.TryHeldJump(), Is.False,
+                "The repeated jump must not retrigger before another landing.");
+            yield return null;
+            Assert.That(player.transform.position.y,
+                Is.GreaterThan(floorPosition.y));
+        }
+
+        [UnityTest]
+        public IEnumerator HoldingSpaceBeforeLandingAlsoWaitsHalfSecond()
+        {
+            SceneManager.LoadScene("PlayableWorld");
+            yield return null;
+            var player = GameObject.Find("Creative player");
+            Assert.That(player, Is.Not.Null);
+            var controller = player.GetComponent<CreativeCameraController>();
+            var character = player.GetComponent<CharacterController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(character, Is.Not.Null);
+
+            controller.Teleport(new Vector3(15.5f, 4f, 4f));
+            Physics.SyncTransforms();
+            Assert.That(controller.TryHeldJump(), Is.False,
+                "Holding Space in midair must not jump.");
+            var deadline = Time.realtimeSinceStartup + 5f;
+            while (!character.isGrounded && Time.realtimeSinceStartup < deadline)
+            {
+                Assert.That(controller.TryHeldJump(), Is.False);
+                yield return null;
+            }
+            Assert.That(character.isGrounded, Is.True);
+            Assert.That(controller.TryHeldJump(), Is.False,
+                "Landing with Space already held must start the pause.");
+            yield return new WaitForSecondsRealtime(0.55f);
+            Assert.That(controller.TryHeldJump(), Is.True);
+        }
     }
 }

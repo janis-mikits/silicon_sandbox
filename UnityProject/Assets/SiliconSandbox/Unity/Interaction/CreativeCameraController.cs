@@ -6,6 +6,8 @@ namespace SiliconSandbox.Interaction
     [RequireComponent(typeof(CharacterController))]
     public sealed class CreativeCameraController : MonoBehaviour
     {
+        private const float HeldJumpLandingDelaySeconds = 0.5f;
+
         [SerializeField] private Transform cameraPivot;
         [SerializeField] private float mouseSensitivity = 2.4f;
         [SerializeField] private float walkSpeed = 5f;
@@ -15,6 +17,11 @@ namespace SiliconSandbox.Interaction
         private float pitch;
         private float verticalVelocity;
         private float lastSpacePress = -10f;
+        private float heldJumpReadyAt;
+        private bool jumpAwaitingLanding;
+        private bool airborneSinceGroundContact;
+        private bool heldJumpLandingObserved;
+        private bool suppressHeldJumpUntilRelease;
         private bool interfaceOpen;
         private WorldBounds? worldBounds;
 
@@ -35,6 +42,10 @@ namespace SiliconSandbox.Interaction
             transform.position = position;
             character.enabled = true;
             verticalVelocity = 0f;
+            jumpAwaitingLanding = false;
+            airborneSinceGroundContact = false;
+            heldJumpLandingObserved = false;
+            heldJumpReadyAt = 0f;
         }
 
         public void SetViewDirection(Vector3 direction)
@@ -60,9 +71,19 @@ namespace SiliconSandbox.Interaction
 
         public bool TryJump()
         {
-            if (interfaceOpen || Flying || !HasGroundSupport()) return false;
+            if (interfaceOpen || Flying || jumpAwaitingLanding ||
+                !HasGroundSupport()) return false;
             verticalVelocity = 6f;
+            jumpAwaitingLanding = true;
+            airborneSinceGroundContact = false;
+            heldJumpLandingObserved = false;
             return true;
+        }
+
+        public bool TryHeldJump()
+        {
+            return heldJumpLandingObserved &&
+                   Time.unscaledTime >= heldJumpReadyAt && TryJump();
         }
 
         private bool HasGroundSupport()
@@ -102,11 +123,20 @@ namespace SiliconSandbox.Interaction
                 {
                     Flying = !Flying;
                     verticalVelocity = 0f;
+                    jumpAwaitingLanding = false;
+                    airborneSinceGroundContact = false;
+                    heldJumpLandingObserved = false;
+                    suppressHeldJumpUntilRelease = true;
                 }
                 else if (!Flying)
                     TryJump();
                 lastSpacePress = Time.unscaledTime;
             }
+            if (!Input.GetKey(KeyCode.Space))
+                suppressHeldJumpUntilRelease = false;
+            else if (!Input.GetKeyDown(KeyCode.Space) && !Flying &&
+                     !suppressHeldJumpUntilRelease)
+                TryHeldJump();
 
             var horizontal = Input.GetAxisRaw("Horizontal");
             var forward = Input.GetAxisRaw("Vertical");
@@ -128,6 +158,20 @@ namespace SiliconSandbox.Interaction
                 velocity.y = verticalVelocity;
             }
             character.Move(velocity * Time.deltaTime);
+            if (!Flying)
+            {
+                if (!HasGroundSupport())
+                    airborneSinceGroundContact = true;
+                else if (character.isGrounded &&
+                         airborneSinceGroundContact && verticalVelocity <= 0f)
+                {
+                    jumpAwaitingLanding = false;
+                    airborneSinceGroundContact = false;
+                    heldJumpLandingObserved = true;
+                    heldJumpReadyAt = Time.unscaledTime +
+                        HeldJumpLandingDelaySeconds;
+                }
+            }
             if (worldBounds.HasValue)
             {
                 var bounds = worldBounds.Value;
