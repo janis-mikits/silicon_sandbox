@@ -105,7 +105,7 @@ namespace SiliconSandbox.Application
                         spans, source.Tag, source.IdentityColor,
                         retainsLink ? source.LinkName : null,
                         retainsLink ? source.LinkScope : null,
-                        retainsLink ? source.SourceKind : null));
+                        retainsLink ? source.SourceKind : null, source.GeometryVersion));
                 }
             }
 

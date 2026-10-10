@@ -102,6 +102,7 @@ namespace SiliconSandbox.Tests.EditMode
             var junctions = OneBitVisualTopology.Junctions(session.Design.Topology);
             Assert.That(junctions.Count, Is.EqualTo(1));
             Assert.That(junctions[0].DirectionCount, Is.EqualTo(4));
+            Assert.That(junctions[0].DirectionMask, Is.EqualTo(51)); // E W N S
             Assert.That(junctions[0].PointQ, Is.EqualTo(new QuarterPoint(2, 2, 2)));
         }
 
@@ -128,6 +129,7 @@ namespace SiliconSandbox.Tests.EditMode
             var markers = OneBitVisualTopology.Junctions(session.Design.Topology);
             Assert.That(markers.Count, Is.EqualTo(1));
             Assert.That(markers[0].DirectionCount, Is.EqualTo(3));
+            Assert.That(markers[0].DirectionMask, Is.EqualTo(35)); // E W S
         }
 
         private static OneBitWorldDesign SourceAndGate()

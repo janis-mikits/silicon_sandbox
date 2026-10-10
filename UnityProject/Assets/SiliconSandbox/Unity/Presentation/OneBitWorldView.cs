@@ -43,6 +43,8 @@ namespace SiliconSandbox.Presentation
             new Dictionary<int, List<Renderer>>();
         private readonly Dictionary<int, LogicBit> shownSignalValues =
             new Dictionary<int, LogicBit>();
+        private readonly Dictionary<Guid, Vector3> attachedNodePositions = new Dictionary<Guid, Vector3>();
+        private readonly HashSet<Guid> changedAttachmentRoutes = new HashSet<Guid>();
         private MaterialPropertyBlock signalProperties;
         private Transform generatedRoot;
         private ulong shownRevision = ulong.MaxValue;
@@ -107,6 +109,7 @@ namespace SiliconSandbox.Presentation
             }
             ReconcileComponents();
             ReconcileModules();
+            RefreshAttachmentPositions();
             ReconcileRoutes();
             ReconcileJunctions();
             BuildSignalGroups();
@@ -200,7 +203,7 @@ namespace SiliconSandbox.Presentation
                 next.Add(item.Id, item);
             foreach (var pair in drawnRoutes)
                 if (!next.TryGetValue(pair.Key, out var current) ||
-                    !ReferenceEquals(pair.Value, current))
+                    !ReferenceEquals(pair.Value, current) || changedAttachmentRoutes.Contains(pair.Key))
                 {
                     Retire(routeRoots[pair.Key]);
                     routeRoots.Remove(pair.Key);
@@ -209,7 +212,7 @@ namespace SiliconSandbox.Presentation
                 }
             foreach (var pair in next)
                 if (!drawnRoutes.TryGetValue(pair.Key, out var old) ||
-                    !ReferenceEquals(old, pair.Value))
+                    !ReferenceEquals(old, pair.Value) || changedAttachmentRoutes.Contains(pair.Key))
                     DrawRoute(pair.Value);
             drawnRoutes.Clear();
             foreach (var pair in next) drawnRoutes.Add(pair.Key, pair.Value);
@@ -225,7 +228,8 @@ namespace SiliconSandbox.Presentation
             var remove = new List<JoinMember>();
             foreach (var pair in junctions)
                 if (!next.TryGetValue(pair.Key, out var current) ||
-                    !SameJunction(pair.Value.Model, current))
+                    !SameJunction(pair.Value.Model, current) ||
+                    changedAttachmentRoutes.Contains(pair.Value.Model.ConnectorId))
                 {
                     if (routeBodies.TryGetValue(pair.Value.Model.ConnectorId,
                             out var bodies))
@@ -240,11 +244,13 @@ namespace SiliconSandbox.Presentation
                     var item = pair.Value;
                     var marker = Primitive("Junction " + item.NodeId.ToString("D"),
                         PrimitiveType.Sphere, RegionRoot(item.Cell));
-                    marker.transform.position = RoutePosition(item.Cell,
-                        item.PointQ, item.Channel);
-                    marker.GetComponent<MeshFilter>().sharedMesh = art.Junction;
+                    marker.transform.position = attachedNodePositions.TryGetValue(item.NodeId, out var joinedPosition)
+                        ? joinedPosition : RoutePosition(item.Cell, item.PointQ, item.Channel);
+                    var core = WireMeshGeometry.JunctionCore(art.WireVariants[item.DirectionMask]);
+                    marker.GetComponent<MeshFilter>().sharedMesh = core;
+                    marker.AddComponent<OwnedWireMesh>().Mesh = core;
                     marker.GetComponent<Renderer>().sharedMaterial = art.TintMaterial;
-                    marker.GetComponent<SphereCollider>().radius = 0.17f;
+                    marker.GetComponent<SphereCollider>().radius = 0.085f;
                     marker.AddComponent<WorldSelectablePart>().Initialize(
                         WorldPartKind.ConnectorNode, item.ConnectorId,
                         item.NodeId);
@@ -266,7 +272,7 @@ namespace SiliconSandbox.Presentation
         private static bool SameJunction(OneBitVisibleJunction a,
             OneBitVisibleJunction b) =>
             a.Cell.Equals(b.Cell) && a.PointQ.Equals(b.PointQ) &&
-            a.Channel == b.Channel && a.DirectionCount == b.DirectionCount;
+            a.Channel == b.Channel && a.DirectionMask == b.DirectionMask;
 
         private static void Retire(GameObject item)
         {
@@ -409,13 +415,15 @@ namespace SiliconSandbox.Presentation
                 var marker = Primitive("Node " + node.Id.ToString("D"),
                     PrimitiveType.Sphere, root.transform);
                 marker.transform.position = RoutePosition(node);
-                marker.transform.localScale = Vector3.one * 0.16f;
+                marker.transform.localScale = Vector3.one * 0.08f;
                 marker.AddComponent<WorldSelectablePart>().Initialize(
                     WorldPartKind.ConnectorNode, route.Id, node.Id);
                 renderers.Add(marker.GetComponent<Renderer>());
             }
             foreach (var span in route.Spans)
-                DrawSpan(root.transform, route.Id, span,
+                if (route.GeometryVersion == 2)
+                    DrawExactSpan(root.transform, route, span, nodes, renderers);
+                else DrawSpan(root.transform, route.Id, span,
                     nodes[span.FromNodeId], nodes[span.ToNodeId], renderers);
             var cap = Primitive("Identity ring", PrimitiveType.Cylinder, root.transform);
             var first = RoutePosition(route.Nodes[0]);
@@ -424,7 +432,14 @@ namespace SiliconSandbox.Presentation
             {
                 var candidate = RoutePosition(node) - first;
                 if (candidate.sqrMagnitude < 0.000001f) continue;
-                along = candidate.normalized;
+                if (route.Nodes[0].PointQ.IsFacePoint)
+                {
+                    var normal = FaceNormal(route.Nodes[0].PointQ);
+                    along = Vector3.Dot(candidate, normal) >= 0f ? normal : -normal;
+                }
+                else if (node.PointQ.IsFacePoint && node.Cell.Equals(route.Nodes[0].Cell))
+                    along = FaceNormal(node.PointQ);
+                else along = candidate.normalized;
                 break;
             }
             cap.transform.position = first + along * 0.14f;
@@ -432,14 +447,56 @@ namespace SiliconSandbox.Presentation
             cap.GetComponent<MeshFilter>().sharedMesh = art.IdentityRing;
             cap.GetComponent<Renderer>().sharedMaterial = art.TintMaterial;
             var ringCollider = cap.GetComponent<CapsuleCollider>();
-            ringCollider.radius = 0.128f;
-            ringCollider.height = 0.256f;
+            ringCollider.radius = 0.064f;
+            ringCollider.height = 0.128f;
             var identity = new MaterialPropertyBlock();
             identity.SetColor("_Color", IdentityColor(route));
             identity.SetColor("_BaseColor", IdentityColor(route));
             cap.GetComponent<Renderer>().SetPropertyBlock(identity);
             cap.AddComponent<WorldSelectablePart>().Initialize(
                 WorldPartKind.ConnectorNode, route.Id, route.Nodes[0].Id);
+        }
+
+        private void DrawExactSpan(Transform root, ConnectorRoute route, RouteSpan span,
+            Dictionary<Guid, RouteNode> nodes, List<Renderer> renderers)
+        {
+            var from=RoutePosition(nodes[span.FromNodeId]);
+            var to=RoutePosition(nodes[span.ToNodeId]);
+            if((to-from).sqrMagnitude<0.000001f)
+            { DrawSpan(root,route.Id,span,nodes[span.FromNodeId],nodes[span.ToNodeId],renderers); return; }
+            var heading=(to-from).normalized;
+            var incoming=Continuation(span.FromNodeId,span.Id,-heading);
+            var outgoing=Continuation(span.ToNodeId,span.Id,heading);
+            var item=new GameObject("Exact span " + span.Id.ToString("D"));
+            item.transform.SetParent(root,false);item.transform.position=from;
+            var mesh=WireMeshGeometry.Path(new[]{Vector3.zero,to-from},-incoming,outgoing);
+            item.AddComponent<MeshFilter>().sharedMesh=mesh;
+            item.AddComponent<OwnedWireMesh>().Mesh=mesh;
+            var renderer=item.AddComponent<MeshRenderer>();renderer.sharedMaterial=art.TintMaterial;
+            item.AddComponent<MeshCollider>().sharedMesh=mesh;
+            item.AddComponent<WorldSelectablePart>().Initialize(WorldPartKind.ConnectorSpan,route.Id,span.Id);
+            renderers.Add(renderer);
+
+            Vector3 Continuation(Guid nodeId,Guid excluded,Vector3 fallback)
+            {
+                var visited=new HashSet<Guid>();var pending=new Queue<Guid>();pending.Enqueue(nodeId);
+                Vector3? result=null;
+                while(pending.Count>0)
+                {
+                    var id=pending.Dequeue();if(!visited.Add(id))continue;
+                    foreach(var edge in route.Spans)
+                    {
+                        if(edge.Id==excluded)continue;
+                        var other=edge.FromNodeId==id ? edge.ToNodeId : edge.ToNodeId==id ? edge.FromNodeId : Guid.Empty;
+                        if(other==Guid.Empty || visited.Contains(other))continue;
+                        var delta=RoutePosition(nodes[other])-RoutePosition(nodes[id]);
+                        if(delta.sqrMagnitude<0.000001f){pending.Enqueue(other);continue;}
+                        if(result.HasValue)return fallback; // Branch uses the junction core.
+                        result=delta.normalized;
+                    }
+                }
+                return result??fallback;
+            }
         }
 
         private void DrawSpan(Transform root, Guid connectorId, RouteSpan span,
@@ -452,7 +509,9 @@ namespace SiliconSandbox.Presentation
                 var bridge = Primitive("Face bridge " + span.Id.ToString("D"),
                     PrimitiveType.Sphere, root);
                 bridge.transform.position = from;
-                bridge.transform.localScale = Vector3.one * 0.26f;
+                bridge.transform.localScale = Vector3.one * 0.125f;
+                // Coincident authored face nodes need a hit target, not an enlarged visible bead.
+                bridge.GetComponent<Renderer>().enabled = false;
                 bridge.AddComponent<WorldSelectablePart>().Initialize(
                     WorldPartKind.ConnectorSpan, connectorId, span.Id);
                 renderers.Add(bridge.GetComponent<Renderer>());
@@ -480,23 +539,12 @@ namespace SiliconSandbox.Presentation
             Guid spanId, Vector3 center, Vector3 face, QuarterPoint facePoint,
             List<Renderer> renderers)
         {
-            Vector3 first;
-            Vector3 second;
-            if (facePoint.X == 0 || facePoint.X == 4)
-            {
-                first = new Vector3(face.x, center.y, center.z);
-                second = new Vector3(face.x, face.y, center.z);
-            }
-            else if (facePoint.Y == 0 || facePoint.Y == 4)
-            {
-                first = new Vector3(center.x, face.y, center.z);
-                second = new Vector3(face.x, face.y, center.z);
-            }
-            else
-            {
-                first = new Vector3(center.x, center.y, face.z);
-                second = new Vector3(face.x, center.y, face.z);
-            }
+            var normal = FaceNormal(facePoint);
+            // Leave the junction in its authored face direction, then align
+            // the quadrant before the final coaxial approach into the pin.
+            var first = center + normal * 0.15625f;
+            var lead = Mathf.Min(0.125f, Vector3.Dot(face - center, normal) * 0.25f);
+            var second = face - normal * lead;
             DrawPath(root, connectorId, spanId,
                 new[] { center, first, second, face }, renderers);
         }
@@ -510,53 +558,28 @@ namespace SiliconSandbox.Presentation
                     (point - points[points.Count - 1]).sqrMagnitude > 0.000001f)
                     points.Add(point);
             if (points.Count < 2) return;
-            var elbows = new bool[points.Count];
-            for (var i = 1; i < points.Count - 1; i++)
+            // Collapse collinear points to keep straight authored routes straight.
+            for (var i = points.Count - 2; i > 0; i--)
+                if (Vector3.Dot((points[i] - points[i - 1]).normalized,
+                    (points[i + 1] - points[i]).normalized) > 0.9999f)
+                    points.RemoveAt(i);
+            if (points.Count == 2)
             {
-                var incoming = points[i] - points[i - 1];
-                var outgoing = points[i + 1] - points[i];
-                if (Mathf.Abs(Vector3.Dot(incoming.normalized,
-                        outgoing.normalized)) < 0.001f &&
-                    incoming.magnitude >= (elbows[i - 1] ? 1f : 0.5f) - 0.0001f &&
-                    outgoing.magnitude >= 0.5f - 0.0001f)
-                    elbows[i] = true;
+                DrawCylinder(root, connectorId, spanId, points[0], points[1], renderers);
+                return;
             }
-            for (var i = 0; i < points.Count - 1; i++)
-            {
-                var direction = (points[i + 1] - points[i]).normalized;
-                DrawCylinder(root, connectorId, spanId,
-                    points[i] + direction * (elbows[i] ? 0.5f : 0f),
-                    points[i + 1] - direction * (elbows[i + 1] ? 0.5f : 0f),
-                    renderers);
-            }
-            for (var i = 1; i < points.Count - 1; i++)
-                if (elbows[i])
-                    DrawElbow(root, connectorId, spanId,
-                        points[i - 1], points[i], points[i + 1], renderers);
-        }
-
-        private void DrawElbow(Transform root, Guid connectorId, Guid spanId,
-            Vector3 previous, Vector3 corner, Vector3 next,
-            List<Renderer> renderers)
-        {
-            var towardPrevious = (previous - corner).normalized;
-            var towardNext = (next - corner).normalized;
-            var right = -towardPrevious;
-            var up = Vector3.Cross(towardNext, right);
-            var elbow = new GameObject("Elbow " + spanId.ToString("D"));
-            elbow.transform.SetParent(root, false);
-            elbow.transform.position = corner;
-            elbow.transform.rotation = Quaternion.LookRotation(towardNext, up);
-            elbow.AddComponent<MeshFilter>().sharedMesh = art.WireElbow;
-            var renderer = elbow.AddComponent<MeshRenderer>();
+            var item = new GameObject("Continuous span " + spanId.ToString("D"));
+            item.transform.SetParent(root, false);
+            var origin = points[0]; item.transform.position = origin;
+            var local = new List<Vector3>();
+            foreach (var point in points) local.Add(point - origin);
+            var mesh = WireMeshGeometry.Path(local);
+            item.AddComponent<MeshFilter>().sharedMesh = mesh;
+            item.AddComponent<OwnedWireMesh>().Mesh = mesh;
+            var renderer = item.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = art.TintMaterial;
-            var firstArm = elbow.AddComponent<BoxCollider>();
-            firstArm.center = new Vector3(-0.25f, 0f, 0f);
-            firstArm.size = new Vector3(0.5f, 0.25f, 0.25f);
-            var secondArm = elbow.AddComponent<BoxCollider>();
-            secondArm.center = new Vector3(0f, 0f, 0.25f);
-            secondArm.size = new Vector3(0.25f, 0.25f, 0.5f);
-            elbow.AddComponent<WorldSelectablePart>().Initialize(
+            item.AddComponent<MeshCollider>().sharedMesh = mesh;
+            item.AddComponent<WorldSelectablePart>().Initialize(
                 WorldPartKind.ConnectorSpan, connectorId, spanId);
             renderers.Add(renderer);
         }
@@ -574,7 +597,7 @@ namespace SiliconSandbox.Presentation
             cylinder.GetComponent<MeshFilter>().sharedMesh = art.WireStraight;
             cylinder.GetComponent<Renderer>().sharedMaterial = art.TintMaterial;
             var collider = cylinder.GetComponent<CapsuleCollider>();
-            collider.radius = 0.125f;
+            collider.radius = 0.0625f;
             collider.height = 1f;
             cylinder.AddComponent<WorldSelectablePart>().Initialize(
                 WorldPartKind.ConnectorSpan, connectorId, spanId);
@@ -644,7 +667,7 @@ namespace SiliconSandbox.Presentation
             pin.GetComponent<Renderer>().sharedMaterial = art.TintMaterial;
             var collider = pin.GetComponent<CapsuleCollider>();
             collider.center = new Vector3(0f, -0.03875f, 0f);
-            collider.radius = 0.1f;
+            collider.radius = 0.06875f;
             collider.height = 0.2025f;
         }
 
@@ -682,12 +705,75 @@ namespace SiliconSandbox.Presentation
                 cell.Y + point.Y * 0.25f,
                 cell.Z + point.Z * 0.25f);
 
-        private static Vector3 RoutePosition(RouteNode node) =>
+        private void RefreshAttachmentPositions()
+        {
+            var next = new Dictionary<Guid, Vector3>();
+            var visualNodes = new Dictionary<Guid, Vector3>();
+            foreach (var route in session.Design.Topology.Connectors)
+                foreach (var node in route.Nodes)
+                {
+                    visualNodes[node.Id] = WireMeshGeometry.NodePosition(node.Cell,node.PointQ,node.Channel,route.GeometryVersion);
+                    if(route.GeometryVersion == 2)next[node.Id]=visualNodes[node.Id];
+                }
+            foreach (var join in session.Design.Topology.Joins)
+            {
+                Renderer pin = null;
+                foreach (var member in join.Members)
+                    if (pinRenderers.TryGetValue(member, out pin)) break;
+                Vector3? position = pin == null ? (Vector3?)null : pin.transform.position;
+                if (!position.HasValue)
+                    foreach (var member in join.Members)
+                        if (member.Kind == JoinTargetKind.ConnectorNode && next.TryGetValue(member.PartId,out var exact))
+                        { position=exact; break; }
+                if (!position.HasValue)
+                    foreach (var member in join.Members)
+                        if (member.Kind == JoinTargetKind.ConnectorNode)
+                        { position = visualNodes[member.PartId]; break; }
+                if (!position.HasValue) continue;
+                foreach (var member in join.Members)
+                    if (member.Kind == JoinTargetKind.ConnectorNode)
+                        next[member.PartId] = position.Value;
+            }
+            // Both sides of an authored zero-length face bridge share the
+            // attachment position; never propagate to an unrelated crossing.
+            bool changed;
+            do
+            {
+                changed = false;
+                foreach (var route in session.Design.Topology.Connectors)
+                {
+                    var nodes = new Dictionary<Guid, RouteNode>();
+                    foreach (var node in route.Nodes) nodes[node.Id] = node;
+                    foreach (var span in route.Spans)
+                    {
+                        var a = nodes[span.FromNodeId]; var b = nodes[span.ToNodeId];
+                        if (Position(a.Cell, a.PointQ) != Position(b.Cell, b.PointQ)) continue;
+                        if (next.TryGetValue(a.Id, out var ap) && !next.ContainsKey(b.Id))
+                        { next[b.Id] = ap; changed = true; }
+                        else if (next.TryGetValue(b.Id, out var bp) && !next.ContainsKey(a.Id))
+                        { next[a.Id] = bp; changed = true; }
+                    }
+                }
+            } while (changed);
+            changedAttachmentRoutes.Clear();
+            foreach (var route in session.Design.Topology.Connectors)
+                foreach (var node in route.Nodes)
+                {
+                    var before = attachedNodePositions.TryGetValue(node.Id, out var a);
+                    var after = next.TryGetValue(node.Id, out var b);
+                    if (before != after || before && a != b)
+                        changedAttachmentRoutes.Add(route.Id);
+                }
+            attachedNodePositions.Clear();
+            foreach (var pair in next) attachedNodePositions.Add(pair.Key, pair.Value);
+        }
+
+        private Vector3 RoutePosition(RouteNode node) =>
+            attachedNodePositions.TryGetValue(node.Id, out var exact) ? exact :
             RoutePosition(node.Cell, node.PointQ, node.Channel);
 
         private static Vector3 RoutePosition(GridCell cell, QuarterPoint point,
-            int channel) => Position(cell, point) +
-            Vector3.up * ((channel - 1.5f) * 0.06f);
+            int channel) => WireMeshGeometry.NodePosition(cell, point, channel);
 
         private static GameObject Primitive(string name, PrimitiveType type,
             Transform parent)

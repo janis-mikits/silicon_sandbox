@@ -20,6 +20,8 @@ namespace SiliconSandbox.Presentation
         public Mesh WireElbow;
         public Mesh Junction;
         public Mesh IdentityRing;
+        // Index is E=1 W=2 U=4 D=8 N=16 S=32; zero is deliberately empty.
+        public Mesh[] WireVariants = new Mesh[64];
         public Material AtlasMaterial;
         public Material TintMaterial;
 
@@ -28,7 +30,14 @@ namespace SiliconSandbox.Presentation
             SourceOne != null && SourceX != null && SourceZ != null &&
             Pin != null && WireStraight != null && WireElbow != null &&
             Junction != null && IdentityRing != null &&
-            AtlasMaterial != null && TintMaterial != null;
+            AtlasMaterial != null && TintMaterial != null && HasWireVariants();
+
+        private bool HasWireVariants()
+        {
+            if (WireVariants == null || WireVariants.Length != 64) return false;
+            for (var i = 1; i < 64; i++) if (WireVariants[i] == null) return false;
+            return true;
+        }
 
         public Mesh SourceValue(LogicBit value)
         {

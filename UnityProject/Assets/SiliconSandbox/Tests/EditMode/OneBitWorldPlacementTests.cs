@@ -34,6 +34,10 @@ namespace SiliconSandbox.Tests.EditMode
             Assert.That(session.Design.Topology.Joins.Count, Is.EqualTo(1));
             Assert.That(session.Design.Topology.Joins[0].Members.Count,
                 Is.EqualTo(2));
+            Assert.Throws<ArgumentException>(() => session.PlaceComponent(BuiltInPinCatalog.Source,
+                new GridCell(2, 1, 3), GridOrientation.Default),
+                "The abandoned wire still blocks the replacement pin's entry.");
+            session.BreakConnector(routeId);
             session.PlaceComponent(BuiltInPinCatalog.Source,
                 new GridCell(2, 1, 3), GridOrientation.Default);
             Assert.That(session.Design.Components.Count, Is.EqualTo(2));
@@ -66,6 +70,9 @@ namespace SiliconSandbox.Tests.EditMode
             Assert.That(session.Design.Topology.Connectors[0].Id,
                 Is.EqualTo(wireId));
             Assert.That(session.Design.Topology.Joins.Count, Is.EqualTo(1));
+            Assert.Throws<ArgumentException>(() => session.PlaceModule(version, "Replacement",
+                new GridCell(6, 1, 4), GridOrientation.Default));
+            session.BreakConnector(wireId);
             session.PlaceModule(version, "Replacement", new GridCell(6, 1, 4),
                 GridOrientation.Default);
             Assert.That(session.Design.Modules.Count, Is.EqualTo(1));

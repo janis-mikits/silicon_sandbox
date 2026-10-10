@@ -46,6 +46,8 @@ namespace SiliconSandbox.Interaction
         private bool ghostValid;
         private bool ghostCached;
         private float invalidUntil;
+        private AudioSource invalidAudio;
+        private AudioClip invalidClick;
         private bool inventoryOpen;
         private bool configureOpen;
         private bool inspectOpen;
@@ -466,30 +468,31 @@ namespace SiliconSandbox.Interaction
 
         private void DrawWirePreview(ConnectorRoute route)
         {
+            Vector3 PreviewPosition(RouteNode node) =>
+                WireMeshGeometry.NodePosition(node.Cell,node.PointQ,node.Channel,route.GeometryVersion);
             var green = new Color(0.2f, 0.9f, 0.55f, 0.62f);
             var nodes = new Dictionary<Guid, RouteNode>();
             foreach (var node in route.Nodes)
             {
                 nodes.Add(node.Id, node);
                 AddWirePreviewPart(PrimitiveType.Sphere,
-                    PointPosition(node.Cell, node.PointQ) +
-                        Vector3.up * ((node.Channel - 1.5f) * 0.06f),
-                    Vector3.one * 0.18f, green);
+                    PreviewPosition(node),
+                    Vector3.one * 0.08f, green);
             }
             foreach (var span in route.Spans)
             {
                 var first = nodes[span.FromNodeId];
                 var second = nodes[span.ToNodeId];
-                var from = PointPosition(first.Cell, first.PointQ) +
-                    Vector3.up * ((first.Channel - 1.5f) * 0.06f);
-                var to = PointPosition(second.Cell, second.PointQ) +
-                    Vector3.up * ((second.Channel - 1.5f) * 0.06f);
+                var from = PreviewPosition(first);
+                var to = PreviewPosition(second);
                 if ((to - from).sqrMagnitude < 0.000001f)
                 {
                     AddWirePreviewPart(PrimitiveType.Sphere, from,
-                        Vector3.one * 0.26f, green);
+                        Vector3.one * 0.125f, green);
                     continue;
                 }
+                if(route.GeometryVersion==2)
+                { DrawWirePreviewCylinder(from,to,green); continue; }
                 if (first.Cell.Equals(second.Cell) &&
                     (first.PointQ.IsCenter && second.PointQ.IsFacePoint ||
                      second.PointQ.IsCenter && first.PointQ.IsFacePoint))
@@ -498,23 +501,10 @@ namespace SiliconSandbox.Interaction
                     var face = first.PointQ.IsFacePoint ? from : to;
                     var point = first.PointQ.IsFacePoint
                         ? first.PointQ : second.PointQ;
-                    Vector3 bend1;
-                    Vector3 bend2;
-                    if (point.X == 0 || point.X == 4)
-                    {
-                        bend1 = new Vector3(face.x, center.y, center.z);
-                        bend2 = new Vector3(face.x, face.y, center.z);
-                    }
-                    else if (point.Y == 0 || point.Y == 4)
-                    {
-                        bend1 = new Vector3(center.x, face.y, center.z);
-                        bend2 = new Vector3(face.x, face.y, center.z);
-                    }
-                    else
-                    {
-                        bend1 = new Vector3(center.x, center.y, face.z);
-                        bend2 = new Vector3(face.x, center.y, face.z);
-                    }
+                    var normal = WireMeshGeometry.FaceNormal(point);
+                    var bend1 = center + normal * 0.15625f;
+                    var lead = Mathf.Min(0.125f, Vector3.Dot(face - center, normal) * 0.25f);
+                    var bend2 = face - normal * lead;
                     DrawWirePreviewCylinder(center, bend1, green);
                     DrawWirePreviewCylinder(bend1, bend2, green);
                     DrawWirePreviewCylinder(bend2, face, green);
@@ -535,7 +525,7 @@ namespace SiliconSandbox.Interaction
             if (delta.sqrMagnitude < 0.000001f) return;
             var part = AddWirePreviewPart(PrimitiveType.Cylinder,
                 (from + to) * 0.5f,
-                new Vector3(0.25f, delta.magnitude * 0.5f, 0.25f), color);
+                new Vector3(0.125f, delta.magnitude * 0.5f, 0.125f), color);
             part.transform.rotation = Quaternion.FromToRotation(Vector3.up,
                 delta);
         }
@@ -606,6 +596,25 @@ namespace SiliconSandbox.Interaction
         {
             invalidUntil = Time.unscaledTime + 0.18f;
             if (hovered != null) hovered.FlashInvalid();
+            if (invalidAudio == null)
+            {
+                invalidAudio = gameObject.AddComponent<AudioSource>();
+                invalidAudio.playOnAwake = false;
+                invalidAudio.spatialBlend = 0f;
+                invalidAudio.volume = 0.15f;
+                const int sampleRate = 22050;
+                var samples = new float[882]; // Quiet 40 ms invalid-action click.
+                for (var i = 0; i < samples.Length; i++)
+                {
+                    var envelope = Mathf.Min(1f, i / 32f) * Mathf.Pow(1f - (float)i / samples.Length, 2f);
+                    samples[i] = 0.3f * envelope * Mathf.Sin(2f * Mathf.PI * 220f * i / sampleRate);
+                }
+                invalidClick = AudioClip.Create("Invalid action", samples.Length, 1, sampleRate, false);
+                invalidClick.SetData(samples, 0);
+                if (viewCamera != null && FindAnyObjectByType<AudioListener>() == null)
+                    viewCamera.gameObject.AddComponent<AudioListener>();
+            }
+            if (!invalidAudio.isPlaying) invalidAudio.PlayOneShot(invalidClick);
         }
 
         private void UpdateGhost()
@@ -722,6 +731,7 @@ namespace SiliconSandbox.Interaction
             if (rotationRoot != null) Destroy(rotationRoot);
             if (selectionRoot != null) Destroy(selectionRoot);
             if (selectionLineMaterial != null) Destroy(selectionLineMaterial);
+            if (invalidClick != null) Destroy(invalidClick);
         }
 
         private bool SelectionCell(out GridCell cell)

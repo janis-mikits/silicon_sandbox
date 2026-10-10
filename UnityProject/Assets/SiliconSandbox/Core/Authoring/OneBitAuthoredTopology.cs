@@ -24,6 +24,7 @@ namespace SiliconSandbox.Authoring
         public int Z { get; }
 
         public QuarterPoint(int x, int y, int z) { X = x; Y = y; Z = z; }
+        public bool IsInteriorQuarterPoint => X >= 1 && X <= 3 && Y >= 1 && Y <= 3 && Z >= 1 && Z <= 3;
         public bool IsCenter => X == 2 && Y == 2 && Z == 2;
         public bool IsFacePoint
         {
@@ -118,10 +119,11 @@ namespace SiliconSandbox.Authoring
         public string LinkName { get; }
         public string LinkScope { get; }
         public string SourceKind { get; }
+        public int GeometryVersion { get; }
 
         public ConnectorRoute(Guid id, string kind, int width, IEnumerable<RouteNode> nodes,
             IEnumerable<RouteSpan> spans, string tag = "", string identityColor = null,
-            string linkName = null, string linkScope = null, string sourceKind = null)
+            string linkName = null, string linkScope = null, string sourceKind = null, int geometryVersion = 1)
         {
             Id = id;
             Kind = kind;
@@ -133,6 +135,9 @@ namespace SiliconSandbox.Authoring
             LinkName = linkName;
             LinkScope = linkScope;
             SourceKind = sourceKind;
+            if (geometryVersion != 1 && geometryVersion != 2)
+                throw new ArgumentException("Unsupported connector geometry version.");
+            GeometryVersion = geometryVersion;
         }
     }
 

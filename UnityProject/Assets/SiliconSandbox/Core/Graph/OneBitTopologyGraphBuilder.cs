@@ -101,7 +101,8 @@ namespace SiliconSandbox.Graph
                     if (node == null) throw Invalid("Null route node.");
                     AddId(allIds, node.Id);
                     if (node.Channel < 0 || node.Channel > 3 ||
-                        (!node.PointQ.IsFacePoint && !node.PointQ.IsCenter))
+                        (!node.PointQ.IsFacePoint && !(route.GeometryVersion == 2
+                            ? node.PointQ.IsInteriorQuarterPoint : node.PointQ.IsCenter)))
                         throw Invalid("Invalid channel or route point.");
                     AddMember(JoinMember.ConnectorNode(route.Id, node.Id), node.Cell, node.PointQ);
                 }
@@ -122,7 +123,11 @@ namespace SiliconSandbox.Graph
                         throw Invalid("Span references missing or identical node.");
                     var first = JoinMember.ConnectorNode(route.Id, span.FromNodeId);
                     var second = JoinMember.ConnectorNode(route.Id, span.ToNodeId);
-                    if (!ValidSpan(points[first], points[second]))
+                    if (!ValidSpan(points[first], points[second]) ||
+                        route.GeometryVersion == 2 && points[first].cell.Equals(points[second].cell) &&
+                        (points[first].point.X != points[second].point.X ? 1 : 0) +
+                        (points[first].point.Y != points[second].point.Y ? 1 : 0) +
+                        (points[first].point.Z != points[second].point.Z ? 1 : 0) != 1)
                         throw Invalid("Span is neither within one cell nor across a shared face.");
                     Union(parents, memberIndexes[first], memberIndexes[second]);
                 }

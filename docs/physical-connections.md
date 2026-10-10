@@ -6,6 +6,7 @@
 - [Pins and targeting](#pins-and-targeting)
 - [Junctions and crossings](#junctions-and-crossings)
 - [Authored topology representation](#authored-topology-representation)
+- [Wire routing](#wire-routing)
 - [Visible topology](#visible-topology)
 - [Crowded selection and invalid actions](#crowded-selection-and-invalid-actions)
 - [Post placement rotation](#post-placement-rotation)
@@ -37,6 +38,24 @@ The representation must retain the four-channel-per-cell occupancy independently
 
 **First-playable split-channel decision, 5 October 2026:** If breaking one span leaves disconnected surviving pieces in the same cell and channel, keep their node/span identities and face points, and move a later piece to the lowest free logical channel in each affected cell. If no channel is free, reject the entire break with the normal invalid-action feedback; do not silently delete another surviving piece or publish a fifth channel. This is the user-preapproved recommendation recorded in the [autonomous decision log](../verification/first-playable-autonomous-decisions.md).
 
+## Wire routing
+
+**Wire-routing decision, 9 October 2026:** New pin-to-pin, pin-to-node, and open-ended wire routes use exact quarter-block points. Every physical straight segment is at least 0.25 block long. A wire leaves and enters a pin along that pin's cylinder axis, through its centered flat end; it must never enter the side. This applies to rotated component pins and module ports as well. The sole minimum-length exception is an explicit bridge between touching pins at the same world point, retained at the user's request. Zero-length cross-cell bookkeeping spans do not represent additional physical segments.
+
+Among routes that respect obstacles, world bounds, pin approach directions, physical wire separation, and the existing channel and face-quadrant constraints, choose in this order:
+
+1. Fewest turns.
+2. Shortest total wire length.
+3. Lexicographically longest straight segments measured from the input: maximize the nearest segment first, then the next, and so on. An output-to-input connection uses the input regardless of click order. For two pins without a unique input, the second selected pin supplies the deterministic tie-break origin. For a free end or junction, use the input pin when present, otherwise the target end.
+
+The preview, committed renderer, and saved route use the same exact bend positions. Channel numbers remain electrical occupancy identifiers; they do not shift these wires away from their authored coordinates. Reject an impossible route atomically with the existing invalid-action feedback. Existing connectors are not automatically rerouted by placing a new wire. The user waived compatibility with earlier demo worlds; no demo-world migration is required.
+
+**Pin connection corridors, 9 October 2026:** Reserve a straight approach corridor for every component pin and module port. Its centerline follows the outward pin axis from the authored attachment point, includes the protruding 0.0625-block pin face, and extends another 0.25 block beyond that face. Unrelated wire centerlines must remain at least 0.15 block from this segment, including its endpoints. Only a connector explicitly joined to that exact pin may enter its corridor; merely sharing an electrical net does not grant access. Keep the explicit touching-pin bridge exception. Routing treats corridors as obstacles while retaining the ordered turn/length/input-side priorities above.
+
+Placing a component or module rejects the entire edit if an existing wire occupies any of its new pin corridors, even when the block's own cell is empty. Placement preview uses the same validation and the existing invalid-placement feedback. Replacing a deleted block in its former orientation can therefore require removing its abandoned wire first. Do not reroute or remove existing wires automatically. This rule protects local pin access; it does not guarantee a complete route through arbitrary surrounding obstacles.
+
+**Routing failure safeguard, 9 October 2026:** A blocked pin approach rejects before searching, checking both ends of the required entry segment. A synchronous route request shares a safety budget across all channel attempts: 50 ms of elapsed search-request time, at most 8,192 queue removals, and 32,768 recorded search candidates. Exhausting any limit returns the existing invalid-action feedback without publishing a partial or unproven route. A valid but unusually costly route can therefore be rejected; the player may clear nearby obstructions and retry. Failed previews remain cached for the same target/design revision rather than being recomputed each frame. Clicking an invalid connection gives one brief red flash and quiet error click, clears the provisional connection, and leaves breaking/editing available.
+
 ## Visible topology
 
 Electrical connection must be inferable from geometry. An endpoint needs no junction marker. A joined path with two incident directions appears as a straight segment or elbow, without a separate marker. A joined net with three to six incident directions gets a visible junction marker. Count directions separately for each net in the cell; crossing nets do not inflate one another’s count. A crossing without a junction stays visibly separate. Removing a branch updates the shape. A concatenation point has a visibly different marker and always appears, even when only two directions are involved. Procedural geometry is acceptable if these distinctions are clear; individual mesh models for every combination are not mandatory. The user specifically accepted this wording:
@@ -59,6 +78,8 @@ The final decision allows rotation of a placed component or module. Rotation fir
 
 ## Connector appearance
 
-Wire diameter is 0.25 of a block width, with a hitbox matching the thin geometry so players can walk close to it. Straight pieces, 90-degree elbows, and branches can use all six faces. Harnesses have the same diameter and narrow hitbox regardless of width, with a distinctive texture. A Net Link is a straight wire-like stub with a semispherical cap. It remains a physical, visible, targetable, breakable segment even though matching links communicate without a continuous physical chain.
+Wire diameter is 0.125 of a block width, with a hitbox matching the thin geometry so players can walk close to it. Straight pieces, 90-degree elbows, and branches can use all six faces. Harnesses have the same diameter and narrow hitbox regardless of width, with a distinctive texture. A Net Link is a straight wire-like stub with a semispherical cap. It remains a physical, visible, targetable, breakable segment even though matching links communicate without a continuous physical chain.
+
+**Pin fit and complete wire geometry decision, 7 October 2026:** The user requires pin cylinders to have a diameter 10 percent larger than ordinary wires: 0.1375 cell for the 0.125-cell wire. At an explicit pin attachment, the wire and pin cylinder axes and face centers align, with the wire visually entering the pin and the pin rim remaining visible. Channel display offsets must not shift attached wire ends away from the authored pin center. Preserve authored pin positions and electrical identities. Supply seamless visual geometry for every turn and every three- through six-direction junction across the six faces; unjoined crossings remain separate. This visual correction does not add proximity-based connectivity.
 
 **Identity and signal color rule, 30 September 2026:** A connector's main visible body carries the current 0/1/X/Z signal-state color from [digital simulation](digital-simulation.md#visuals). Its saved player-selected identity color appears on a separate narrow stripe, ring, or end cap that does not obscure the body, X pulse, junction/crossing shape, or target outline. An unset identity color uses a neutral default. This settles first-playable one-bit presentation without assigning a mixed-value color to later harnesses.

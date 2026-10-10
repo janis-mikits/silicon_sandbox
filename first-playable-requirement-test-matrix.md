@@ -124,6 +124,7 @@ Save after the third edge with Q=0/0. Reopen: exact AND and module designs/layou
 - Failure injection before/after each save/package durable-publication stage preserves the last good archive and exposes no half-published library/inventory entry.
 - Autosave runs every five minutes including paused simulation; retention keeps at least four newer backups before removing an older-than-20-minute backup. Normal exit saves. Recovery offers timestamped valid choices.
 - Thin wires/channels/pins/floor cells remain exactly targetable after batching/rebuild. Crossing and junction appearance differ. Identity stripe never obscures signal state.
+- Pin connection corridors: an SR Q-to-AND-B wire must leave Q_bar targetable from its front and connectable to AND A afterward. Block/module placement rejects an existing wire in a new pin corridor atomically; rotated pins use their outward axis; explicit touching-pin bridges still work. E: literal route/placement geometry and all 24 orientations. P: front-on ray selects Q_bar before the second connection.
 - Local edits invalidate affected render regions and neighbor boundaries only; signal color changes do not rebuild unrelated static geometry. Hidden opaque faces are omitted without erasing required detail.
 - Placement/removal/rotation/load/undo/redo reveal correct faces. Superseded asynchronous results, if introduced, cannot restore stale geometry or selection. Returning to an offscreen region refreshes settled values before display.
 
@@ -152,5 +153,7 @@ Choose one Windows machine and one Mac; record OS/CPU/GPU/RAM and keep hardware/
 Do not silently change scene/settings or thresholds after seeing results. Revise provisional criteria only with explicit approval and measured evidence. CI smoke builds do not substitute for this gate; no 1 GHz real-time performance acceptance exists.
 
 ## Reporting and completion
+
+- Failed wire reconnect: after breaking only the source leg, the remaining wire must reject a new connection immediately in either click order without publishing an edit. Removing the obstruction must allow retry. An enclosed approach that passes local clearance must hit a bounded search limit. E: literal quarter-cell obstruction and enclosed pocket in a 1024 × 1024 × 256 world. P: cached invalid preview, click flash/audio, continued frames, cleared selection, and successful retry. Executed evidence: [routing freeze regression](verification/wire-routing-freeze-2026-10-09.md).
 
 For each test/slice, record exact commands, exit/result, test count, platform/Editor/commit, changed files, report paths and remaining risks. Distinguish passed, failed, blocked and unrun. The shared verification wrappers and Windows/Mac CI design are in the implementation plan. No row is complete until its evidence exists; no CI pass is claimed without a real run.

@@ -41,6 +41,7 @@ namespace SiliconSandbox.Application
             var candidate = new OneBitWorldDesign(original.Bounds, components,
                 topology, original.Modules);
             OneBitTopologyGraphBuilder.Build(candidate.Topology);
+            PinConnectionCorridors.ValidatePlacement(candidate, placed.Id);
             return candidate;
         }
 
@@ -57,6 +58,7 @@ namespace SiliconSandbox.Application
             var candidate = new OneBitWorldDesign(original.Bounds,
                 original.Components, topology, original.Modules);
             OneBitTopologyGraphBuilder.Build(candidate.Topology);
+            PinConnectionCorridors.ValidateConnector(candidate.Topology, connector);
             return candidate;
         }
 
@@ -177,6 +179,7 @@ namespace SiliconSandbox.Application
             var candidate = new OneBitWorldDesign(original.Bounds,
                 original.Components, topology, modules);
             OneBitTopologyGraphBuilder.Build(candidate.Topology);
+            PinConnectionCorridors.ValidatePlacement(candidate, placed.Id);
             return candidate;
         }
 

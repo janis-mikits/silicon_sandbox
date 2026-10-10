@@ -52,7 +52,7 @@ namespace SiliconSandbox.Application
                 routes.Add(affected.Contains(route.Id) && route.Tag != retainedTag
                     ? new ConnectorRoute(route.Id, route.Kind, route.Width, route.Nodes,
                         route.Spans, retainedTag, route.IdentityColor,
-                        route.LinkName, route.LinkScope, route.SourceKind)
+                        route.LinkName, route.LinkScope, route.SourceKind, route.GeometryVersion)
                     : route);
             var joins = new List<ElectricalJoin>(original.Joins) { join };
             return Validated(original.Pins, original.ModulePorts, routes, joins,
@@ -184,7 +184,7 @@ namespace SiliconSandbox.Application
                         route.Width, nodes, spans, route.Tag, route.IdentityColor,
                         keepsLink ? route.LinkName : null,
                         keepsLink ? route.LinkScope : null,
-                        keepsLink ? route.SourceKind : null));
+                        keepsLink ? route.SourceKind : null, route.GeometryVersion));
                 }
             }
             var joins = new List<ElectricalJoin>();

@@ -15,7 +15,9 @@ namespace SiliconSandbox.Persistence
             if (manifest == null) throw new ArgumentNullException(nameof(manifest));
             WorldManifestIntegrity.ValidateStructure(manifest);
             var json = new StringBuilder();
-            json.Append("{\"formatVersion\":1,\"worldId\":");
+            json.Append("{\"formatVersion\":");
+            json.Append(manifest.FormatVersion);
+            json.Append(",\"worldId\":");
             Quoted(json, manifest.WorldId.ToString("D"));
             json.Append(",\"entries\":[");
             for (var i = 0; i < manifest.Entries.Count; i++)

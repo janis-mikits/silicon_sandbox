@@ -12,9 +12,10 @@ namespace SiliconSandbox.Graph
         public QuarterPoint PointQ { get; }
         public int Channel { get; }
         public int DirectionCount { get; }
+        public int DirectionMask { get; }
 
         internal OneBitVisibleJunction(Guid connectorId, RouteNode node,
-            int directionCount)
+            int directionCount, int directionMask)
         {
             ConnectorId = connectorId;
             NodeId = node.Id;
@@ -22,6 +23,7 @@ namespace SiliconSandbox.Graph
             PointQ = node.PointQ;
             Channel = node.Channel;
             DirectionCount = directionCount;
+            DirectionMask = directionMask;
         }
     }
 
@@ -105,7 +107,7 @@ namespace SiliconSandbox.Graph
                 {
                     var chosen = nodes[representative[pair.Key]];
                     result.Add(new OneBitVisibleJunction(chosen.ConnectorId,
-                        chosen.Node, pair.Value.Count));
+                        chosen.Node, pair.Value.Count, Mask(pair.Value)));
                 }
             result.Sort((a, b) =>
             {
@@ -113,6 +115,22 @@ namespace SiliconSandbox.Graph
                 return order != 0 ? order : a.NodeId.CompareTo(b.NodeId);
             });
             return result.AsReadOnly();
+        }
+
+        private static int Mask(IEnumerable<GridDirection> directions)
+        {
+            var mask = 0;
+            foreach (var direction in directions)
+                switch (direction)
+                {
+                    case GridDirection.East: mask |= 1; break;
+                    case GridDirection.West: mask |= 2; break;
+                    case GridDirection.Up: mask |= 4; break;
+                    case GridDirection.Down: mask |= 8; break;
+                    case GridDirection.North: mask |= 16; break;
+                    case GridDirection.South: mask |= 32; break;
+                }
+            return mask;
         }
 
         private static GridCell Difference(RouteNode from, RouteNode to) =>

@@ -17,19 +17,12 @@ namespace SiliconSandbox.Application
         }
     }
 
-    // Two-target first-playable wire tool. It chooses a shortest route through
-    // empty grid cells, then records exact face points and explicit joins.
+    // Two-target first-playable wire tool. It records exact quarter-grid
+    // routes and explicit joins, with straight approaches at both pins.
     // This is an authoring convenience; the topology, not this pathfinder,
     // remains authoritative for electrical connectivity.
     public static class OneBitPinRoutePlanner
     {
-        private static readonly GridDirection[] SearchOrder =
-        {
-            GridDirection.East, GridDirection.West,
-            GridDirection.North, GridDirection.South,
-            GridDirection.Up, GridDirection.Down
-        };
-
         public static OneBitPinRouteProposal Plan(OneBitWorldDesign design,
             JoinMember first, JoinMember second)
         {
@@ -52,117 +45,180 @@ namespace SiliconSandbox.Application
                 return proposal;
             }
 
-            var firstFace = Face(firstPin.PointQ);
-            var secondFace = Face(secondPin.PointQ);
-            var start = Move(firstPin.Cell, firstFace);
-            var finish = Move(secondPin.Cell, secondFace);
-            var blockedCells = BlockedCells(design);
-            for (var channel = 0; channel < 4; channel++)
-            {
-                var occupied = new HashSet<GridCell>(blockedCells);
-                foreach (var connector in design.Topology.Connectors)
-                    foreach (var node in connector.Nodes)
-                        if (node.Channel == channel) occupied.Add(node.Cell);
-                var path = FindPath(design.Bounds, start, finish, occupied);
-                if (path == null) continue;
-                var proposal = Build(path, channel, first, firstPin, second,
-                    FacePoint(Opposite(Face(secondPin.PointQ)), secondPin.PointQ));
-                // Validate the complete route/joins against the current design
-                // before offering it to the caller for one atomic publication.
-                OneBitWorldEdits.PlaceConnector(design, proposal.Route, proposal.Joins);
-                return proposal;
-            }
-            throw new ArgumentException("No free one-bit connector route or channel.");
+            // Search from the input so the run-length tie-break is independent
+            // of which pin the player clicked first.
+            if (IsInput(design, first) && !IsInput(design, second))
+                return Route(design, first, firstPin, second, secondPin, null);
+            return Route(design, second, secondPin, first, firstPin, null);
         }
 
         public static OneBitPinRouteProposal PlanToConnectorNode(
             OneBitWorldDesign design, JoinMember pin, JoinMember targetNode)
         {
             if (design == null) throw new ArgumentNullException(nameof(design));
-            if (!IsPhysicalPin(pin) ||
-                targetNode.Kind != JoinTargetKind.ConnectorNode)
+            if (!IsPhysicalPin(pin) || targetNode.Kind != JoinTargetKind.ConnectorNode)
                 throw new ArgumentException("Choose a free physical pin and a connector node.");
-            var sourcePin = FindPin(design, pin);
-            RouteNode target = null;
             foreach (var route in design.Topology.Connectors)
                 if (route.Id == targetNode.OwnerId)
                     foreach (var node in route.Nodes)
-                        if (node.Id == targetNode.PartId) { target = node; break; }
-            if (target == null) throw new ArgumentException("Unknown connector node.");
-            foreach (var component in design.Components)
-                if (component.AnchorCell.Equals(target.Cell))
-                    throw new ArgumentException("Target a connector node outside a component body.");
-            foreach (var module in design.Modules)
-                foreach (var cell in module.OccupiedCells())
-                    if (cell.Equals(target.Cell))
-                        throw new ArgumentException("Target a connector node outside a module body.");
-            foreach (var join in design.Topology.Joins)
-                foreach (var member in join.Members)
-                    if (member.Equals(pin))
-                        throw new ArgumentException("The selected pin already has a connector.");
-
-            var start = Move(sourcePin.Cell, Face(sourcePin.PointQ));
-            var blockedComponents = BlockedCells(design);
-            for (var channel = 0; channel < 4; channel++)
-            {
-                var occupied = new HashSet<GridCell>(blockedComponents);
-                foreach (var route in design.Topology.Connectors)
-                    foreach (var node in route.Nodes)
-                        if (node.Channel == channel && !node.Cell.Equals(target.Cell))
-                            occupied.Add(node.Cell);
-                var path = FindPath(design.Bounds, start, target.Cell, occupied);
-                if (path == null) continue;
-                var proposal = Build(path, channel, pin, sourcePin,
-                    targetNode, target.PointQ);
-                try
-                {
-                    OneBitWorldEdits.PlaceConnector(design, proposal.Route, proposal.Joins);
-                    return proposal;
-                }
-                catch (ArgumentException)
-                {
-                    // Another path may fit a different physical channel.
-                }
-            }
-            throw new ArgumentException("No valid route to the targeted connector node.");
+                        if (node.Id == targetNode.PartId)
+                            return Route(design, pin, FindPin(design,pin), targetNode, null, node);
+            throw new ArgumentException("Unknown connector node.");
         }
 
         public static OneBitPinRouteProposal PlanToOpenCell(
             OneBitWorldDesign design, JoinMember pin, GridCell targetCell)
         {
             if (design == null) throw new ArgumentNullException(nameof(design));
-            if (!IsPhysicalPin(pin))
-                throw new ArgumentException("Choose a free physical pin.");
-            var sourcePin = FindPin(design, pin);
-            foreach (var join in design.Topology.Joins)
-                foreach (var member in join.Members)
-                    if (member.Equals(pin))
-                        throw new ArgumentException("The selected pin already has a connector.");
-            var start = Move(sourcePin.Cell, Face(sourcePin.PointQ));
-            var blockedComponents = BlockedCells(design);
-            for (var channel = 0; channel < 4; channel++)
+            if (!IsPhysicalPin(pin)) throw new ArgumentException("Choose a free physical pin.");
+            return Route(design,pin,FindPin(design,pin),null,null,
+                new RouteNode(Guid.Empty,targetCell,0,new QuarterPoint(2,2,2)));
+        }
+
+        private static bool IsInput(OneBitWorldDesign design,JoinMember member)
+        {
+            foreach(var component in design.Components)
+                if(component.Id==member.OwnerId)
+                    foreach(var pin in BuiltInPinCatalog.Pins(component.TypeId,component.TypeVersion))
+                        if(component.PinIds[pin.Key]==member.PartId)return pin.Direction==PinDirection.Input;
+            foreach(var module in design.Modules)
+                if(module.Id==member.OwnerId)
+                    foreach(var port in module.InterfacePorts)
+                        if(port.Id==member.PartId)return port.Direction==OneBitPortDirection.Input;
+            return false;
+        }
+
+        private static OneBitPinRouteProposal Route(OneBitWorldDesign design,
+            JoinMember first, AuthoredPin firstPin, JoinMember? second,
+            AuthoredPin secondPin, RouteNode target)
+        {
+            var budget = new QuarterWireRouter.SearchBudget();
+            foreach(var join in design.Topology.Joins)
+                foreach(var member in join.Members)
+                    if(member.Equals(first) || secondPin!=null && member.Equals(second.Value))
+                        throw new ArgumentException("A selected pin already has a connector.");
+            var start=QuarterWireRouter.Point(firstPin.Cell,firstPin.PointQ);
+            var finish=secondPin!=null ? QuarterWireRouter.Point(secondPin.Cell,secondPin.PointQ) :
+                QuarterWireRouter.Point(target.Cell,target.PointQ);
+            var startDirection=QuarterWireRouter.Normal(firstPin.PointQ);
+            var finishDirection=secondPin==null ? -1 : QuarterWireRouter.Normal(secondPin.PointQ)^1;
+            var reverse=secondPin==null && !IsInput(design,first);
+            if(reverse)
             {
-                var occupied = new HashSet<GridCell>(blockedComponents);
-                foreach (var route in design.Topology.Connectors)
-                    foreach (var node in route.Nodes)
-                        if (node.Channel == channel)
-                            occupied.Add(node.Cell);
-                var path = FindPath(design.Bounds, start, targetCell, occupied);
-                if (path == null) continue;
-                var proposal = Build(path, channel, pin, sourcePin, null,
-                    new QuarterPoint(2, 2, 2));
-                try
+                var swap=start;start=finish;finish=swap;
+                finishDirection=startDirection^1;startDirection=-1;
+            }
+            var allowedPins = new List<JoinMember> { first };
+            if (secondPin != null) allowedPins.Add(second.Value);
+            var corridors = new PinConnectionCorridors(design.Topology, allowedPins);
+            var blocked=BlockedCells(design);
+            var occupiedPoints=new HashSet<GridCell>();
+            foreach(var existing in design.Topology.Connectors)
+            {
+                var map=new Dictionary<Guid,RouteNode>();
+                foreach(var node in existing.Nodes)
                 {
-                    OneBitWorldEdits.PlaceConnector(design, proposal.Route,
-                        proposal.Joins);
-                    return proposal;
+                    budget.Check();
+                    map[node.Id]=node;
+                    occupiedPoints.Add(QuarterWireRouter.Point(node.Cell,node.PointQ));
+                    // Old presentation paths have sub-quarter lane offsets.
+                    // Keep their cells clear except the explicitly targeted cell.
+                    if(existing.GeometryVersion==1 && (target==null || !node.Cell.Equals(target.Cell)))
+                        blocked.Add(node.Cell);
                 }
-                catch (ArgumentException)
+                if(existing.GeometryVersion!=2)continue;
+                foreach(var span in existing.Spans)
                 {
-                    // Another physical channel may have a valid route.
+                    var a=QuarterWireRouter.Point(map[span.FromNodeId].Cell,map[span.FromNodeId].PointQ);
+                    var b=QuarterWireRouter.Point(map[span.ToNodeId].Cell,map[span.ToNodeId].PointQ);
+                    var step=new GridCell(Math.Sign(b.X-a.X),Math.Sign(b.Y-a.Y),Math.Sign(b.Z-a.Z));
+                    for(var q=a;!q.Equals(b);q=QuarterWireRouter.Add(q,step))
+                    { budget.Check(); occupiedPoints.Add(q); }
                 }
             }
-            throw new ArgumentException("No valid open wire path to that cell.");
+            QuarterWireRouter.Path best=null;var bestChannel=-1;
+            var searchedOccupancy = new List<HashSet<GridCell>>();
+            for(var channel=0;channel<4;channel++)
+            {
+                var occupied=new HashSet<GridCell>(blocked);
+                foreach(var existing in design.Topology.Connectors)
+                    foreach(var node in existing.Nodes)
+                        if(node.Channel==channel && !(second.HasValue &&
+                            second.Value.Kind==JoinTargetKind.ConnectorNode &&
+                            target.Cell.Equals(node.Cell) && existing.Id==second.Value.OwnerId))
+                            occupied.Add(node.Cell);
+                var alreadySearched = false;
+                foreach (var prior in searchedOccupancy)
+                    if (prior.SetEquals(occupied)) { alreadySearched = true; break; }
+                if (alreadySearched) continue;
+                searchedOccupancy.Add(occupied);
+                bool PointFree(GridCell p) => !occupiedPoints.Contains(p) ||
+                    target != null && p.Equals(QuarterWireRouter.Point(target.Cell,target.PointQ));
+                bool Free(GridCell a, GridCell b)
+                {
+                    var cell=QuarterWireRouter.SegmentCell(a,b);
+                    return design.Bounds.ContainsPlaceable(cell) && !occupied.Contains(cell) &&
+                        corridors.AllowsSegment(a,b) &&
+                        PointFree(a) && PointFree(b);
+                }
+                var canLeave = false; var canEnter = false;
+                for (var d = 0; d < 6; d++)
+                {
+                    var next = QuarterWireRouter.Add(start, QuarterWireRouter.Steps[d]);
+                    var prior = QuarterWireRouter.Add(finish, QuarterWireRouter.Steps[d ^ 1]);
+                    var farNext = QuarterWireRouter.Add(next, QuarterWireRouter.Steps[d]);
+                    var farPrior = QuarterWireRouter.Add(prior, QuarterWireRouter.Steps[d ^ 1]);
+                    if ((startDirection < 0 || d == startDirection) && Free(start,next) &&
+                        (QuarterWireRouter.ValidPoint(next) || QuarterWireRouter.ValidPoint(farNext) &&
+                         QuarterWireRouter.SegmentCell(start,next).Equals(QuarterWireRouter.SegmentCell(next,farNext)) &&
+                         Free(next,farNext))) canLeave = true;
+                    if ((finishDirection < 0 || d == finishDirection) && Free(prior,finish) &&
+                        (QuarterWireRouter.ValidPoint(prior) || QuarterWireRouter.ValidPoint(farPrior) &&
+                         QuarterWireRouter.SegmentCell(farPrior,prior).Equals(QuarterWireRouter.SegmentCell(prior,finish)) &&
+                         Free(farPrior,prior))) canEnter = true;
+                }
+                if (!canLeave || !canEnter) continue;
+                var path=QuarterWireRouter.Find(start,startDirection,finish,finishDirection,Free,budget);
+                if(path!=null && (best==null || QuarterWireRouter.Compare(path,best)<0))
+                {best=path;bestChannel=channel;}
+            }
+            if(best==null)throw new ArgumentException("No valid one-bit wire route or channel.");
+            var points=QuarterWireRouter.Points(best);
+            // Keep the established first-pin -> target authored order.
+            if(reverse)points.Reverse();
+            var proposal=BuildExact(points,bestChannel,first,second);
+            OneBitWorldEdits.PlaceConnector(design,proposal.Route,proposal.Joins);
+            return proposal;
+        }
+
+        private static OneBitPinRouteProposal BuildExact(List<GridCell> points,
+            int channel,JoinMember first,JoinMember? second)
+        {
+            var nodes=new List<RouteNode>();var spans=new List<RouteSpan>();
+            RouteNode prior=null;
+            for(var i=0;i<points.Count-1;i++)
+            {
+                var cell=QuarterWireRouter.SegmentCell(points[i],points[i+1]);
+                if(prior==null || !prior.Cell.Equals(cell))
+                {
+                    var node=new RouteNode(Guid.NewGuid(),cell,channel,QuarterWireRouter.Local(points[i],cell));
+                    nodes.Add(node);
+                    if(prior!=null)spans.Add(new RouteSpan(Guid.NewGuid(),prior.Id,node.Id));
+                    prior=node;
+                }
+                // Only bends, face boundaries, and the endpoint need nodes.
+                if(i+2<points.Count && QuarterWireRouter.SegmentCell(points[i+1],points[i+2]).Equals(cell) &&
+                    points[i+1].X-points[i].X==points[i+2].X-points[i+1].X &&
+                    points[i+1].Y-points[i].Y==points[i+2].Y-points[i+1].Y &&
+                    points[i+1].Z-points[i].Z==points[i+2].Z-points[i+1].Z)continue;
+                var end=new RouteNode(Guid.NewGuid(),cell,channel,QuarterWireRouter.Local(points[i+1],cell));
+                nodes.Add(end);spans.Add(new RouteSpan(Guid.NewGuid(),prior.Id,end.Id));prior=end;
+            }
+            var route=new ConnectorRoute(Guid.NewGuid(),"wire",1,nodes,spans,geometryVersion:2);
+            var firstJoin=new ElectricalJoin(Guid.NewGuid(),new[]{first,JoinMember.ConnectorNode(route.Id,nodes[0].Id)});
+            return second.HasValue ? new OneBitPinRouteProposal(route,firstJoin,
+                new ElectricalJoin(Guid.NewGuid(),new[]{second.Value,JoinMember.ConnectorNode(route.Id,prior.Id)})) :
+                new OneBitPinRouteProposal(route,firstJoin);
         }
 
         private static OneBitPinRouteProposal DirectFaceBridge(
@@ -207,92 +263,6 @@ namespace SiliconSandbox.Application
             first.Cell.Y * 4L + first.PointQ.Y == second.Cell.Y * 4L + second.PointQ.Y &&
             first.Cell.Z * 4L + first.PointQ.Z == second.Cell.Z * 4L + second.PointQ.Z;
 
-        private static OneBitPinRouteProposal Build(IReadOnlyList<GridCell> path,
-            int channel, JoinMember first, AuthoredPin firstPin,
-            JoinMember? second, QuarterPoint finalPoint)
-        {
-            var connectorId = Guid.NewGuid();
-            var nodes = new List<RouteNode>();
-            var spans = new List<RouteSpan>();
-            RouteNode previousExit = null;
-            RouteNode firstNode = null;
-            RouteNode lastNode = null;
-            for (var i = 0; i < path.Count; i++)
-            {
-                var cell = path[i];
-                var entry = i == 0
-                    ? FacePoint(Opposite(Face(firstPin.PointQ)), firstPin.PointQ)
-                    : FacePoint(Direction(cell, path[i - 1]), null);
-                var exit = i == path.Count - 1
-                    ? finalPoint
-                    : FacePoint(Direction(cell, path[i + 1]), null);
-                var entryNode = new RouteNode(Guid.NewGuid(), cell, channel, entry);
-                nodes.Add(entryNode);
-                if (firstNode == null) firstNode = entryNode;
-                if (previousExit != null)
-                    spans.Add(new RouteSpan(Guid.NewGuid(), previousExit.Id, entryNode.Id));
-                lastNode = entryNode;
-                if (!entry.Equals(exit))
-                {
-                    var exitNode = new RouteNode(Guid.NewGuid(), cell, channel, exit);
-                    nodes.Add(exitNode);
-                    spans.Add(new RouteSpan(Guid.NewGuid(), entryNode.Id, exitNode.Id));
-                    lastNode = exitNode;
-                }
-                previousExit = lastNode;
-            }
-            var route = new ConnectorRoute(connectorId, "wire", 1, nodes, spans);
-            var firstJoin = new ElectricalJoin(Guid.NewGuid(), new[]
-            {
-                first, JoinMember.ConnectorNode(connectorId, firstNode.Id)
-            });
-            if (!second.HasValue)
-                return new OneBitPinRouteProposal(route, firstJoin);
-            return new OneBitPinRouteProposal(route, firstJoin,
-                new ElectricalJoin(Guid.NewGuid(), new[]
-                {
-                    second.Value,
-                    JoinMember.ConnectorNode(connectorId, lastNode.Id)
-                }));
-        }
-
-        private static List<GridCell> FindPath(WorldBounds bounds, GridCell start,
-            GridCell finish, HashSet<GridCell> occupied)
-        {
-            if (!bounds.ContainsPlaceable(start) || !bounds.ContainsPlaceable(finish) ||
-                occupied.Contains(start) || occupied.Contains(finish))
-                return null;
-            var queue = new Queue<GridCell>();
-            var previous = new Dictionary<GridCell, GridCell>();
-            queue.Enqueue(start);
-            previous.Add(start, start);
-            while (queue.Count > 0)
-            {
-                var cell = queue.Dequeue();
-                if (cell.Equals(finish))
-                {
-                    var path = new List<GridCell>();
-                    for (var current = finish; ; current = previous[current])
-                    {
-                        path.Add(current);
-                        if (current.Equals(start)) break;
-                    }
-                    path.Reverse();
-                    return path;
-                }
-                foreach (var direction in SearchOrder)
-                {
-                    var next = Move(cell, direction);
-                    if (!bounds.ContainsPlaceable(next) || occupied.Contains(next) ||
-                        previous.ContainsKey(next))
-                        continue;
-                    previous.Add(next, cell);
-                    queue.Enqueue(next);
-                }
-            }
-            return null;
-        }
-
         private static AuthoredPin FindPin(OneBitWorldDesign design, JoinMember member)
         {
             foreach (var pin in design.Topology.Pins)
@@ -331,84 +301,5 @@ namespace SiliconSandbox.Application
             throw new ArgumentException("Pin is not on a cell face.");
         }
 
-        private static QuarterPoint FacePoint(GridDirection face, QuarterPoint? reference)
-        {
-            var x = reference.HasValue ? reference.Value.X : 1;
-            var y = reference.HasValue ? reference.Value.Y : 1;
-            var z = reference.HasValue ? reference.Value.Z : 1;
-            switch (face)
-            {
-                case GridDirection.East: x = 4; break;
-                case GridDirection.West: x = 0; break;
-                case GridDirection.Up: y = 4; break;
-                case GridDirection.Down: y = 0; break;
-                case GridDirection.North: z = 4; break;
-                case GridDirection.South: z = 0; break;
-                default: throw new ArgumentOutOfRangeException(nameof(face));
-            }
-            // A cross-cell point must have quadrant coordinates on the other
-            // axes, even when the source face used the axis now being changed.
-            if (face == GridDirection.East || face == GridDirection.West)
-            {
-                if (y == 0 || y == 4) y = 1;
-                if (z == 0 || z == 4) z = 1;
-            }
-            else if (face == GridDirection.Up || face == GridDirection.Down)
-            {
-                if (x == 0 || x == 4) x = 1;
-                if (z == 0 || z == 4) z = 1;
-            }
-            else
-            {
-                if (x == 0 || x == 4) x = 1;
-                if (y == 0 || y == 4) y = 1;
-            }
-            return new QuarterPoint(x, y, z);
-        }
-
-        private static GridDirection Opposite(GridDirection direction)
-        {
-            switch (direction)
-            {
-                case GridDirection.East: return GridDirection.West;
-                case GridDirection.West: return GridDirection.East;
-                case GridDirection.North: return GridDirection.South;
-                case GridDirection.South: return GridDirection.North;
-                case GridDirection.Up: return GridDirection.Down;
-                case GridDirection.Down: return GridDirection.Up;
-                default: throw new ArgumentOutOfRangeException(nameof(direction));
-            }
-        }
-
-        private static GridCell Move(GridCell cell, GridDirection direction)
-        {
-            switch (direction)
-            {
-                case GridDirection.East: return new GridCell(cell.X + 1, cell.Y, cell.Z);
-                case GridDirection.West: return new GridCell(cell.X - 1, cell.Y, cell.Z);
-                case GridDirection.North: return new GridCell(cell.X, cell.Y, cell.Z + 1);
-                case GridDirection.South: return new GridCell(cell.X, cell.Y, cell.Z - 1);
-                case GridDirection.Up: return new GridCell(cell.X, cell.Y + 1, cell.Z);
-                case GridDirection.Down: return new GridCell(cell.X, cell.Y - 1, cell.Z);
-                default: throw new ArgumentOutOfRangeException(nameof(direction));
-            }
-        }
-
-        private static GridDirection Direction(GridCell from, GridCell to)
-        {
-            if (to.X == from.X + 1 && to.Y == from.Y && to.Z == from.Z)
-                return GridDirection.East;
-            if (to.X == from.X - 1 && to.Y == from.Y && to.Z == from.Z)
-                return GridDirection.West;
-            if (to.Y == from.Y + 1 && to.X == from.X && to.Z == from.Z)
-                return GridDirection.Up;
-            if (to.Y == from.Y - 1 && to.X == from.X && to.Z == from.Z)
-                return GridDirection.Down;
-            if (to.Z == from.Z + 1 && to.X == from.X && to.Y == from.Y)
-                return GridDirection.North;
-            if (to.Z == from.Z - 1 && to.X == from.X && to.Y == from.Y)
-                return GridDirection.South;
-            throw new ArgumentException("Route cells are not face-adjacent.");
-        }
     }
 }

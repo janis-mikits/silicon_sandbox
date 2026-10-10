@@ -242,6 +242,10 @@ namespace SiliconSandbox.Persistence
         private static ConnectorRoute ReadConnector(JToken token)
         {
             if (!(token is JObject raw)) throw Invalid("Invalid connector.");
+            var geometryVersion = raw["geometryVersion"] == null ? 1 : V1JsonReader.Int32(raw["geometryVersion"]);
+            if (geometryVersion != 1 && geometryVersion != 2) throw Invalid("Unsupported connector geometry version.");
+            raw = (JObject)raw.DeepClone();
+            raw.Remove("geometryVersion");
             var kind = V1JsonReader.String(raw["kind"]);
             var linked = kind == "netLink";
             var route = linked
@@ -277,7 +281,7 @@ namespace SiliconSandbox.Persistence
                 nodes, spans, V1JsonReader.String(route["tag"]), color,
                 linked ? V1JsonReader.String(route["linkName"]) : null,
                 linked ? V1JsonReader.String(route["linkScope"]) : null,
-                linked ? V1JsonReader.String(route["sourceKind"]) : null);
+                linked ? V1JsonReader.String(route["sourceKind"]) : null, geometryVersion);
         }
 
         private static JoinMember Endpoint(JToken token)

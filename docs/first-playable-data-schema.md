@@ -3,6 +3,7 @@
 ## In this file
 
 - [Scope and authority](#scope-and-authority)
+- [Version 2 exact wire geometry](#version-2-exact-wire-geometry)
 - [Grid and orientation](#grid-and-orientation)
 - [World archive](#world-archive)
 - [Shared authored design](#shared-authored-design)
@@ -16,6 +17,14 @@
 **Decision, 30 September 2026:** This is the version 1 logical JSON contract for the first-playable professor milestone. It implements the accepted [ZIP world container](saving-and-recovery.md#first-playable-world-save-container), [authored topology](physical-connections.md#authored-topology-representation), [persistent identity](modules-and-packaging.md#persistent-identity-model), and [fixed module-version model](modules-and-packaging.md#canonical-design-and-runtime-representation). It defines records and references, not C# classes or Unity scene objects. Future format versions may add fields or partition large designs while retaining their circuit meaning. The supported first-playable component and feature subset is in [delivery](delivery-and-acceptance.md#first-playable-professor-milestone); this schema does not remove later-game requirements.
 
 The authored world and embedded fixed module versions are authoritative. The simulator's graph, net IDs/indexes, rendered geometry, selection proxies, ordinary signal values, flip-flop state, pending events, simulation time, and world-clock phase are **not** authoritative save entries. Their load behavior follows [saving](saving-and-recovery.md#saved-design-versus-transient-simulation). Persisted undo history, NVM, and Education progress are later format additions under their existing requirements.
+
+## Version 2 exact wire geometry
+
+**Decision, 9 October 2026:** New world archives write manifest `formatVersion:2`. All version 1 fields below retain their meanings, with one connector extension: optional `geometryVersion`. Omission (or value `1`) denotes the earlier display-derived wire geometry; `2` stores the actual route. Reject unsupported geometry versions. This connector field also applies inside embedded/module-library definitions. Existing demo-world compatibility is not an acceptance requirement for this change.
+
+For geometry version 2, a route node may be any interior quarter-cell point (each coordinate 1–3), or one of the existing face-quadrant points. Nonzero spans must be axis-aligned within their cell. Opposing face nodes at the same world position continue to record explicit cross-cell continuity. Store bend nodes and face boundaries, preserving their IDs; do not serialize a simplified path that drops bends. Rendering uses these exact coordinates without channel offsets, and preview uses the same positions. Ordinary electrical joins, occupancy, module snapshot copying, break/undo, and node/span targeting retain their meanings. Tag edits and connector splits preserve the geometry version. The [routing priorities and touching-pin exception](physical-connections.md#wire-routing) govern newly planned paths.
+
+The ZIP envelope and JSON record layouts otherwise remain unchanged. Version 1 fixtures can still be read by the implementation, but no automatic rerouting or migration of demo worlds is promised. The version 1 validation and compatibility language below describes that original format; version 2 readers additionally accept this explicit geometry extension.
 
 ## Grid and orientation
 

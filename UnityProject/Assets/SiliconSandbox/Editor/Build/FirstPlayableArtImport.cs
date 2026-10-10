@@ -60,6 +60,15 @@ namespace SiliconSandbox.EditorBuild
             art.WireElbow = MeshAt("SS_WireElbow");
             art.Junction = MeshAt("SS_Junction");
             art.IdentityRing = MeshAt("SS_IdentityRing");
+            art.WireVariants = new Mesh[64];
+            const string letters = "EWUDNS";
+            for (var mask = 1; mask < 64; mask++)
+            {
+                var suffix = "";
+                for (var bit = 0; bit < 6; bit++)
+                    if ((mask & (1 << bit)) != 0) suffix += letters[bit];
+                art.WireVariants[mask] = MeshAt("SS_Wire_" + mask.ToString("D2") + "_" + suffix);
+            }
             art.AtlasMaterial = atlas;
             art.TintMaterial = tint;
             if (!art.IsComplete)
@@ -71,6 +80,14 @@ namespace SiliconSandbox.EditorBuild
         private static Mesh MeshAt(string name)
         {
             var path = Root + "/Meshes/" + name + ".fbx";
+            // Junction cores are cut from the imported variants in the player.
+            // Keep this small mesh family readable; bodies remain GPU-only.
+            if (name.StartsWith("SS_Wire_", StringComparison.Ordinal))
+            {
+                var model = AssetImporter.GetAtPath(path) as ModelImporter;
+                if (model != null && !model.isReadable)
+                { model.isReadable = true; model.SaveAndReimport(); }
+            }
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
             var filter = prefab == null ? null :
                 prefab.GetComponentInChildren<MeshFilter>(true);

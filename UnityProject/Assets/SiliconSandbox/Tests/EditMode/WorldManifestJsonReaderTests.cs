@@ -48,7 +48,7 @@ namespace SiliconSandbox.Tests.EditMode
                     "\"formatVersion\":1,\"formatVersion\":1,"))));
             Assert.Throws<InvalidDataException>(() =>
                 WorldManifestJsonReader.Read(Bytes(Valid.Replace(
-                    "\"formatVersion\":1", "\"formatVersion\":2"))));
+                    "\"formatVersion\":1", "\"formatVersion\":3"))));
         }
 
         [Test]

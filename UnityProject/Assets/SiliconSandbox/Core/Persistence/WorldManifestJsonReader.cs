@@ -10,7 +10,8 @@ namespace SiliconSandbox.Persistence
         {
             var root = V1JsonReader.Object(V1JsonReader.Root(bytes),
                 "formatVersion", "worldId", "entries", "moduleVersions");
-            if (V1JsonReader.Integer(root["formatVersion"]) != 1)
+            var formatVersion = V1JsonReader.Int32(root["formatVersion"]);
+            if (formatVersion != 1 && formatVersion != 2)
                 throw new InvalidDataException("Unsupported world format version.");
             var worldId = V1JsonReader.Uuid(root["worldId"]);
             var entries = new List<ManifestEntryRecord>();
@@ -38,7 +39,7 @@ namespace SiliconSandbox.Persistence
                     throw new InvalidDataException("Module path disagrees with version identity.");
                 versions.Add(version);
             }
-            var manifest = new WorldManifestRecord(worldId, entries, versions);
+            var manifest = new WorldManifestRecord(worldId, entries, versions, formatVersion);
             WorldManifestIntegrity.ValidateStructure(manifest);
             return manifest;
         }

@@ -49,17 +49,19 @@ namespace SiliconSandbox.Persistence
 
     public sealed class WorldManifestRecord
     {
-        public int FormatVersion => 1;
+        public int FormatVersion { get; }
         public Guid WorldId { get; }
         public IReadOnlyList<ManifestEntryRecord> Entries { get; }
         public IReadOnlyList<ManifestModuleVersionRecord> ModuleVersions { get; }
 
         public WorldManifestRecord(Guid worldId,
             IEnumerable<ManifestEntryRecord> entries,
-            IEnumerable<ManifestModuleVersionRecord> moduleVersions)
+            IEnumerable<ManifestModuleVersionRecord> moduleVersions, int formatVersion = 2)
         {
             if (worldId == Guid.Empty || entries == null || moduleVersions == null)
                 throw new ArgumentException("Invalid world manifest.");
+            if (formatVersion != 1 && formatVersion != 2) throw new ArgumentException("Unsupported world format version.");
+            FormatVersion = formatVersion;
             WorldId = worldId;
             Entries = new List<ManifestEntryRecord>(entries).AsReadOnly();
             ModuleVersions = new List<ManifestModuleVersionRecord>(

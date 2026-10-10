@@ -175,6 +175,8 @@ namespace SiliconSandbox.Persistence
         {
             json.BeginObject();
             Id(json, "id", route.Id);
+            if (route.GeometryVersion == 2)
+            { json.Name("geometryVersion"); json.Integer(2); }
             json.Name("kind"); json.String(route.Kind);
             json.Name("width"); json.Integer(route.Width);
             json.Name("nodes"); json.BeginArray();

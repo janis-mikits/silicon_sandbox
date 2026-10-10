@@ -18,7 +18,7 @@ namespace SiliconSandbox.Tests.EditMode
             var text = Encoding.UTF8.GetString(
                 WorldManifestJsonWriter.Write(manifest));
             const string expected =
-                "{\"formatVersion\":1," +
+                "{\"formatVersion\":2," +
                 "\"worldId\":\"11111111-1111-4111-8111-111111111111\"," +
                 "\"entries\":[{\"path\":\"world.json\"," +
                 "\"uncompressedBytes\":0," +
