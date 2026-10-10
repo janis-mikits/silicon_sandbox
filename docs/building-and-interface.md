@@ -15,7 +15,7 @@
 
 Before placement, a semitransparent ghost shows the object’s position, orientation, pins, and complete footprint. The side from which the player approaches and aims at the placement cell determines the initial orientation; the player can move around the cell to choose another side. An already placed object may later rotate under the confirmed safe rotation rule in [Section 3](physical-connections.md). Players can target and interact with objects up to 15 blocks away. Walking, flying up and down, movement speeds, collision behavior, and the associated controls must match Minecraft Creative mode, including WASD movement, double-Space flight toggle, Space to rise, and Shift to descend while flying. This is a behavioral reference, not a dependency on or reuse of Minecraft code, and SiliconSandbox’s own world boundaries still apply. Every object and circuit may float without physical support. Existing world-size/boundary choices in the source design document remain relevant unless changed separately.
 
-**Held Space jump, 9 October 2026:** While not flying, pressing Space jumps immediately when grounded. Keeping Space held repeats a jump only after the player has landed and remained grounded for 150 milliseconds; it cannot produce a midair jump. Releasing Space stops automatic repeats. The existing double-tap Space flight toggle remains available.
+**Held Space jump, 9 October 2026:** While not flying, pressing Space jumps immediately when grounded. Keeping Space held repeats a jump only after the player has landed and remained grounded for 75 milliseconds; it cannot produce a midair jump. Releasing Space stops automatic repeats. The existing double-tap Space flight toggle remains available.
 
 ## Undo and redo
 

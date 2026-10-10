@@ -41,7 +41,7 @@ namespace SiliconSandbox.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator HeldJumpWaitsForLandingAnd150MillisecondPause()
+        public IEnumerator HeldJumpWaitsForLandingAnd75MillisecondPause()
         {
             SceneManager.LoadScene("PlayableWorld");
             yield return null;
@@ -77,12 +77,12 @@ namespace SiliconSandbox.Tests.PlayMode
             Assert.That(controller.TryHeldJump(), Is.False,
                 "A held jump must wait after landing.");
 
-            yield return new WaitForSecondsRealtime(0.08f);
+            yield return new WaitForSecondsRealtime(0.025f);
             Assert.That(controller.TryHeldJump(), Is.False,
-                "The landing pause must last longer than 80 ms.");
-            yield return new WaitForSecondsRealtime(0.12f);
+                "The landing pause must last longer than 25 ms.");
+            yield return new WaitForSecondsRealtime(0.075f);
             Assert.That(controller.TryHeldJump(), Is.True,
-                "Holding Space should jump again after the 150 ms landing pause.");
+                "Holding Space should jump again after the 75 ms landing pause.");
             Assert.That(controller.TryHeldJump(), Is.False,
                 "The repeated jump must not retrigger before another landing.");
             yield return null;
@@ -91,7 +91,7 @@ namespace SiliconSandbox.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator HoldingSpaceBeforeLandingAlsoWaits150Milliseconds()
+        public IEnumerator HoldingSpaceBeforeLandingAlsoWaits75Milliseconds()
         {
             SceneManager.LoadScene("PlayableWorld");
             yield return null;
@@ -115,7 +115,7 @@ namespace SiliconSandbox.Tests.PlayMode
             Assert.That(character.isGrounded, Is.True);
             Assert.That(controller.TryHeldJump(), Is.False,
                 "Landing with Space already held must start the pause.");
-            yield return new WaitForSecondsRealtime(0.2f);
+            yield return new WaitForSecondsRealtime(0.1f);
             Assert.That(controller.TryHeldJump(), Is.True);
         }
     }
