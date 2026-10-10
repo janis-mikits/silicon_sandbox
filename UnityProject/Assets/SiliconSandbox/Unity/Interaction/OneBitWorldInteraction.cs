@@ -325,13 +325,51 @@ namespace SiliconSandbox.Interaction
 
         private void RightClick()
         {
-            if (hovered != null && hovered.Kind == WorldPartKind.ComponentBody &&
+            RightClickWithModifier(Input.GetKey(KeyCode.LeftShift) ||
+                Input.GetKey(KeyCode.RightShift));
+        }
+
+        private void RightClickWithModifier(bool shiftHeld)
+        {
+            var selectedId = SelectedCatalogId();
+            var holdingConnector = selectedId == OneBitCatalogItemIds.Wire ||
+                selectedId == OneBitCatalogItemIds.WorldClockLink;
+            if (shiftHeld && holdingConnector && hovered != null &&
+                IsConnectorKind(hovered.Kind))
+            {
+                // The harness feature owns connector-on-connector concatenation.
+                // Never turn this reserved action into an ordinary junction.
+                InvalidAction();
+                return;
+            }
+            if (!shiftHeld && hovered != null &&
+                hovered.Kind == WorldPartKind.ComponentBody &&
                 IsSource(hovered.OwnerId))
             {
                 TryEdit(() => session.ToggleSource(hovered.OwnerId));
                 return;
             }
-            if (SelectedCatalogId() == OneBitCatalogItemIds.Wire)
+            if (shiftHeld && holdingConnector &&
+                (hovered == null || !IsPinKind(hovered.Kind)))
+            {
+                if (!hasHit || !PlacementCell(out var openCell))
+                { InvalidAction(); return; }
+                var placed = false;
+                TryEdit(() =>
+                {
+                    session.PlaceConnector(BuildOpenConnector(openCell, selectedId),
+                        Array.Empty<ElectricalJoin>());
+                    placed = true;
+                });
+                if (placed)
+                {
+                    wireStart = null;
+                    ClearWirePreview();
+                    ghostCached = false;
+                }
+                return;
+            }
+            if (selectedId == OneBitCatalogItemIds.Wire)
             {
                 if (!wireStart.HasValue)
                 {
@@ -371,7 +409,7 @@ namespace SiliconSandbox.Interaction
                 }
                 return;
             }
-            if (SelectedCatalogId() == OneBitCatalogItemIds.WorldClockLink)
+            if (selectedId == OneBitCatalogItemIds.WorldClockLink)
             {
                 if (hovered == null || !IsPinKind(hovered.Kind) ||
                     !IsClockTarget(hovered))
@@ -404,6 +442,40 @@ namespace SiliconSandbox.Interaction
             }
             else TryEdit(() => session.PlaceComponent(typeId, cell, orientation));
             ghostCached = false;
+        }
+
+        private static bool IsConnectorKind(WorldPartKind kind) =>
+            kind == WorldPartKind.ConnectorNode ||
+            kind == WorldPartKind.ConnectorSpan;
+
+        private ConnectorRoute BuildOpenConnector(GridCell cell, string selectedId)
+        {
+            var occupiedChannels = new bool[4];
+            foreach (var route in session.Design.Topology.Connectors)
+                foreach (var node in route.Nodes)
+                    if (node.Cell.Equals(cell)) occupiedChannels[node.Channel] = true;
+            var channel = Array.FindIndex(occupiedChannels, occupied => !occupied);
+            if (channel < 0)
+                throw new ArgumentException("No free channel for an open connector.");
+
+            if (selectedId == OneBitCatalogItemIds.WorldClockLink)
+            {
+                var clockNode = new RouteNode(Guid.NewGuid(), cell, channel,
+                    new QuarterPoint(2, 2, 2));
+                return new ConnectorRoute(Guid.NewGuid(), "netLink", 1,
+                    new[] { clockNode }, Array.Empty<RouteSpan>(), "", null,
+                    "@world-clock", "world", "worldClock", 2);
+            }
+            if (selectedId != OneBitCatalogItemIds.Wire)
+                throw new ArgumentException("The selected item is not a connector.");
+            var first = new RouteNode(Guid.NewGuid(), cell, channel,
+                new QuarterPoint(1, 2, 2));
+            var last = new RouteNode(Guid.NewGuid(), cell, channel,
+                new QuarterPoint(3, 2, 2));
+            return new ConnectorRoute(Guid.NewGuid(), "wire", 1,
+                new[] { first, last },
+                new[] { new RouteSpan(Guid.NewGuid(), first.Id, last.Id) },
+                geometryVersion: 2);
         }
 
         private void UpdateWirePreview()
@@ -619,6 +691,44 @@ namespace SiliconSandbox.Interaction
 
         private void UpdateGhost()
         {
+            var selectedCatalogId = SelectedCatalogId();
+            var shiftHeld = Input.GetKey(KeyCode.LeftShift) ||
+                Input.GetKey(KeyCode.RightShift);
+            if (shiftHeld && hasHit &&
+                (selectedCatalogId == OneBitCatalogItemIds.Wire ||
+                 selectedCatalogId == OneBitCatalogItemIds.WorldClockLink) &&
+                (hovered == null ||
+                 !IsPinKind(hovered.Kind) && !IsConnectorKind(hovered.Kind)) &&
+                PlacementCell(out var openCell))
+            {
+                var openType = "open:" + selectedCatalogId;
+                if (!ghostCached || !ghostCell.Equals(openCell) ||
+                    ghostType != openType)
+                {
+                    ghostCell = openCell;
+                    ghostType = openType;
+                    ghostCached = true;
+                    ghostValid = false;
+                    try
+                    {
+                        var route = BuildOpenConnector(openCell, selectedCatalogId);
+                        OneBitWorldEdits.PlaceConnector(session.Design, route,
+                            Array.Empty<ElectricalJoin>());
+                        ghostValid = true;
+                    }
+                    catch (ArgumentException) { }
+                    catch (NotSupportedException) { }
+                    DrawOpenConnectorGhost(openCell,
+                        selectedCatalogId == OneBitCatalogItemIds.Wire);
+                }
+                if (ghostRoot != null) ghostRoot.SetActive(true);
+                var openColor = ghostValid && Time.unscaledTime >= invalidUntil
+                    ? new Color(0.2f, 0.9f, 0.55f, 0.42f)
+                    : new Color(1f, 0.15f, 0.15f, 0.48f);
+                foreach (var renderer in ghostRenderers)
+                    renderer.material.color = openColor;
+                return;
+            }
             var typeId = SelectedComponentType();
             var moduleVersion = SelectedModuleVersion();
             if ((typeId == null && moduleVersion == null) ||
@@ -673,6 +783,23 @@ namespace SiliconSandbox.Interaction
                 renderer.material.color = color;
         }
 
+        private void DrawOpenConnectorGhost(GridCell cell, bool wire)
+        {
+            if (ghostRoot != null) Destroy(ghostRoot);
+            ghostRoot = new GameObject("Open connector preview");
+            ghostRenderers.Clear();
+            var center = new Vector3(cell.X + 0.5f, cell.Y + 0.5f,
+                cell.Z + 0.5f);
+            if (wire)
+            {
+                var part = AddGhostPrimitive(PrimitiveType.Cylinder, center,
+                    new Vector3(0.125f, 0.25f, 0.125f));
+                part.transform.rotation = Quaternion.Euler(0f, 0f, 90f);
+            }
+            else AddGhostPrimitive(PrimitiveType.Sphere, center,
+                Vector3.one * 0.26f);
+        }
+
         private void DrawGhost()
         {
             if (ghostRoot != null) Destroy(ghostRoot);
@@ -706,7 +833,7 @@ namespace SiliconSandbox.Interaction
             }
         }
 
-        private void AddGhostPrimitive(PrimitiveType type, Vector3 position, Vector3 scale)
+        private GameObject AddGhostPrimitive(PrimitiveType type, Vector3 position, Vector3 scale)
         {
             var item = GameObject.CreatePrimitive(type);
             item.transform.SetParent(ghostRoot.transform, false);
@@ -717,6 +844,7 @@ namespace SiliconSandbox.Interaction
             var shader = Shader.Find("Transparent/Diffuse");
             if (shader != null) renderer.material = new Material(shader);
             ghostRenderers.Add(renderer);
+            return item;
         }
 
         private void HideGhost()

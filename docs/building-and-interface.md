@@ -51,13 +51,15 @@ Menu button placement, ordering, and style must be easy to change without breaki
 
 ## Default controls
 
-**First-playable right-click precedence, 30 September 2026:** The precise target under the crosshair determines the action. Right-clicking the body of a Constant Logic Source toggles its current runtime On/Off state even when a placeable item is selected. A separately targeted free pin on that source accepts placement of the selected connector under the normal pin-placement rules. Right-clicking an ordinary placement target places the selected item. This settles source-body use versus ordinary placement for the first playable; Shift-concatenation and other modifier conflicts remain separate later decisions.
+**First-playable right-click precedence, 30 September 2026:** The precise target under the crosshair determines the action. Ordinary right-clicking the body of a Constant Logic Source toggles its current runtime On/Off state even when a placeable item is selected. A separately targeted free pin on that source accepts placement of the selected connector under the normal pin-placement rules. Right-clicking an ordinary placement target places the selected item. The Shift override is specified below.
+
+**Contextual Shift + right-click, 9 October 2026:** With a component or module selected, Shift + right-click forces placement at the valid ghost location instead of using the targeted object's ordinary right-click action; in particular, it places above a targeted source body without toggling that source. With a connector selected and a pin targeted, the existing pin-attachment flow applies. With a connector selected and a non-connector surface targeted, Shift + right-click places an electrically open connector in the adjacent free cell under the [open-connector rule](physical-connections.md#pins-and-targeting), without inferring a join from proximity. With a connector selected and another connector targeted, Shift + right-click is reserved for concatenation; until harness concatenation is implemented, it gives invalid-action feedback and makes no ordinary junction. Ordinary right-click behavior is unchanged.
 
 **First-playable two-pin wire shortcut, 5 October 2026:** With a one-bit wire selected, right-clicking one free component pin begins a provisional connection and right-clicking a second free component pin commits a visible route through available cells/channels, with explicit authored joins at both ends. If no valid route exists, neither the connector nor either join is published. This is a convenience for free-pin-to-free-pin wiring in the professor milestone; it does not turn geometric contact into an electrical join or replace the targeted junction, crossing, and segment-placement rules for other connector edits. The preview must make the provisional start and final route clear before commit. New routes follow the [quarter-block minimum, straight pin entry, and ordered routing priorities](physical-connections.md#wire-routing).
 
 **First-playable open output wire, 5 October 2026:** With a one-bit wire selected and a free pin chosen as the provisional start, right-clicking a targeted empty floor-referenced cell may end a visible route at that cell's center. The route receives one explicit join at the selected pin; its far end remains electrically open and selectable for inspection or a later targeted connection. The endpoint does not join by visual contact. An occupied, out-of-bounds, or unroutable target rejects the complete edit. This gives the AND Y output a visible connector for the professor's inspection step without requiring an unrelated sink component.
 
-**First-playable control bindings, 30 September 2026:** Default Z rotates the targeted placed component or module one 90-degree vertical-axis step clockwise as viewed from above; X rotates it one step counterclockwise. Both use the existing preview, safe pause, and confirmation rule. Default `[` advances one world-clock edge and `]` advances one complete world-clock cycle, settling all consequences before control returns. Expose the same step actions as labeled pause-screen buttons so they are usable without those keys. All four bindings remain remappable. Later pitch/roll controls and the Shift-concatenation conflict can be specified with their features.
+**First-playable control bindings, 30 September 2026:** Default Z rotates the targeted placed component or module one 90-degree vertical-axis step clockwise as viewed from above; X rotates it one step counterclockwise. Both use the existing preview, safe pause, and confirmation rule. Default `[` advances one world-clock edge and `]` advances one complete world-clock cycle, settling all consequences before control returns. Expose the same step actions as labeled pause-screen buttons so they are usable without those keys. All four bindings remain remappable. Later pitch/roll controls can be specified with their features.
 
 | Input | Action |
 | --- | --- |
@@ -81,7 +83,7 @@ Menu button placement, ordering, and style must be easy to change without breaki
 | P | Start or stop the world clock. |
 | Space while flying | Rise |
 | Shift while flying | Descend |
-| Shift plus right click | Momentary concatenate modifier during connector placement |
+| Shift plus right click | Force-place selected component/module or open connector on a non-connector target; connector-on-connector concatenation when that later feature is available |
 | C | Configure targeted component |
 | I | Inspect targeted connector or pin; on a module body, inspect that placed instance's live internal pins |
 | U | Undo construction edit |
@@ -89,7 +91,7 @@ Menu button placement, ordering, and style must be easy to change without breaki
 | Z / X | Preview clockwise / counterclockwise vertical-axis rotation of the targeted placed component or module; confirmation follows Section 3 |
 | `[` / `]` | Advance one world-clock edge / one complete world-clock cycle while paused |
 
-All bindings are configurable. R/T/Enter also serve group selection. The original Attack label on left-click does not add combat, mobs, or survival mechanics. Source-body use versus placement follows the rule above. Open: Shift flight/sneak and concatenation, and scroll-wheel hotbar selection versus crowded-connector cycling.
+All bindings are configurable. R/T/Enter also serve group selection. The original Attack label on left-click does not add combat, mobs, or survival mechanics. Source-body use versus placement follows the rule above. Open: controller alternate-action mapping and scroll-wheel hotbar selection versus crowded-connector cycling.
 
 ![Original main-menu visual reference](assets/main-menu-reference.png)
 
